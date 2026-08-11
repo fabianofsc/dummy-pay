@@ -77,7 +77,7 @@ updated 2026-08-11.
 - [x] **6.2** — Decoding, strict fields, validation mapping — `internal/http/handler_create_payment.go`, `internal/http/handler_create_payment_test.go`
 - [x] **6.3** — Response shape — `internal/http/types.go`, `internal/http/handler_create_payment_response_test.go`
 
-### Phase 7 — Subscriptions (0/2)
+### Phase 7 — Subscriptions (0/2) *(in progress)*
 
 - [ ] **7.1** — AES-256-GCM secret encryption
 - [ ] **7.2** — Create subscription endpoint
