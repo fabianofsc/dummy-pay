@@ -185,6 +185,22 @@ type DeliveryRepository interface {
 	Create(ctx context.Context, d DeliveryDraft) (deliveryID uuid.UUID, err error)
 }
 
+// ClaimedWork is one row claimed from outbox_work: enough for the worker to
+// dispatch on Kind and load whatever SubjectID references (spec §5).
+type ClaimedWork struct {
+	ID        uuid.UUID
+	Kind      OutboxKind
+	SubjectID uuid.UUID
+}
+
+// OutboxClaimer atomically claims due work for the worker to process
+// (spec §5). The claiming mechanism itself — FOR UPDATE SKIP LOCKED — is a
+// database guarantee and lives in the adapter; the domain only sees the
+// result.
+type OutboxClaimer interface {
+	ClaimDue(ctx context.Context, now time.Time, batch int) ([]ClaimedWork, error)
+}
+
 // Sender delivers signed webhook bytes to a URL (spec §5 "DELIVER_WEBHOOK",
 // spec §8). A non-2xx response is reported as httpStatus with err nil — it
 // is not a failure to deliver, only a failure the receiving side reported.

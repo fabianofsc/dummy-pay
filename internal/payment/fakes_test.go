@@ -218,3 +218,28 @@ func (r *fakeDeliveryRepository) Create(_ context.Context, d DeliveryDraft) (uui
 	r.ids = append(r.ids, id)
 	return id, nil
 }
+
+// fakeOutboxClaimer holds ClaimedWork items seeded directly by a test,
+// standing in for the real database's FOR UPDATE SKIP LOCKED claim
+// (proved separately, against a real database, in Step 9.1). Claiming here
+// removes the item so a second ClaimDue call in the same test — modelling
+// "running the same work twice" — sees nothing left to claim, exactly as
+// outbox_work's claim-to-DONE transition does.
+type fakeOutboxClaimer struct {
+	pending []ClaimedWork
+	calls   int
+}
+
+func (c *fakeOutboxClaimer) ClaimDue(_ context.Context, _ time.Time, batch int) ([]ClaimedWork, error) {
+	c.calls++
+	if len(c.pending) == 0 {
+		return nil, nil
+	}
+	n := batch
+	if n > len(c.pending) {
+		n = len(c.pending)
+	}
+	claimed := c.pending[:n]
+	c.pending = c.pending[n:]
+	return claimed, nil
+}
