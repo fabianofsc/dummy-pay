@@ -23,7 +23,7 @@ from the actual code, not just the step's prose below.
 
 `[ ]` not started · `[~]` in progress · `[x]` done
 
-**Documentation 5/6 (1 in progress) · Steps 14/36 · Acceptance criteria 0/13** —
+**Documentation 5/6 (1 in progress) · Steps 21/36 · Acceptance criteria 0/13** —
 updated 2026-08-11.
 
 ### Documentation (5/6)
@@ -52,18 +52,18 @@ updated 2026-08-11.
 - [x] **2.2** — Payment state machine — `internal/payment/payment.go`
 - [x] **2.3** — Event selection — `internal/payment/events.go`
 
-### Phase 3 — Persistence (0/3)
+### Phase 3 — Persistence (3/3)
 
-- [ ] **3.1** — Migrations and integration test harness
-- [ ] **3.2** — Account seeding
-- [ ] **3.3** — Payment repository
+- [x] **3.1** — Migrations and integration test harness — `migrations/*.sql`, `internal/postgres/testdb_test.go`, `internal/postgres/testdb_integration_test.go`
+- [x] **3.2** — Account seeding — `internal/postgres/account.go`
+- [x] **3.3** — Payment repository — `internal/postgres/payment.go`
 
-### Phase 4 — Idempotency (0/4)
+### Phase 4 — Idempotency (4/4)
 
-- [ ] **4.1** — Request fingerprinting
-- [ ] **4.2** — Claim and complete
-- [ ] **4.3** — Concurrency: exactly one winner
-- [ ] **4.4** — Lease reclamation
+- [x] **4.1** — Request fingerprinting — `internal/payment/fingerprint.go`
+- [x] **4.2** — Claim and complete — `internal/postgres/idempotency.go`
+- [x] **4.3** — Concurrency: exactly one winner — `internal/postgres/idempotency_concurrency_test.go` *(passes under `-race -count=20`)*
+- [x] **4.4** — Lease reclamation — `internal/postgres/idempotency.go` (Reclaim), `internal/postgres/idempotency_concurrency_test.go`
 
 ### Phase 5 — Create-payment use case (3/3)
 
