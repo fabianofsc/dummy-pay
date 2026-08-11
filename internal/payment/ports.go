@@ -41,8 +41,17 @@ const (
 )
 
 // ErrIdempotencyRecordNotFound is returned by IdempotencyStore.Load when no
-// record exists for the given account and key.
+// record exists for the given account and key, and by Complete when the key
+// it is asked to complete was never claimed at all.
 var ErrIdempotencyRecordNotFound = errors.New("idempotency record not found")
+
+// ErrIdempotencyOwnershipLost is returned by IdempotencyStore.Complete when
+// the record still exists but is no longer held by the caller: the caller's
+// lease expired and another request reclaimed the key before this one
+// finished its work. Distinct from ErrIdempotencyRecordNotFound, which means
+// no record exists — that is a programming error, whereas losing ownership
+// is an operational fact about a request that ran longer than its lease.
+var ErrIdempotencyOwnershipLost = errors.New("idempotency key ownership lost to a reclaim")
 
 // IdempotencyRecord is the persisted state of one idempotency key
 // (spec §3 "idempotency_keys"). PaymentID, ResponseStatus, and ResponseBody
@@ -80,11 +89,33 @@ type IdempotencyStore interface {
 	// COMPLETED, already reclaimed by someone else after cutoff, or still
 	// within its lease (claimedAt >= cutoff). Like Claim, "lost the race"
 	// is signalled by ok=false, never by a non-nil err.
+	//
+	// Reclaim only means anything because Claim commits on its own, outside
+	// the transaction that does the work. That is deliberate: if the claim
+	// were part of the work transaction, a process dying mid-flight would
+	// roll its claim back and leave nothing to reclaim, and the lease would
+	// protect against nothing (ADR-0007). The cost of that choice is that a
+	// claim can outlive its owner's usefulness — see Complete.
 	Reclaim(ctx context.Context, accountID uuid.UUID, key string, cutoff, now time.Time) (ok bool, err error)
 
 	// Complete marks an IN_FLIGHT record COMPLETED, attaching the payment it
 	// produced and the exact response to replay verbatim on retry.
-	Complete(ctx context.Context, accountID uuid.UUID, key string, paymentID uuid.UUID, responseStatus int, responseBody []byte, completedAt time.Time) error
+	//
+	// claimedAt is an ownership token, not a timestamp to store: it must be
+	// the claimedAt this caller established — the value it passed to Claim,
+	// or the now a successful Reclaim set — and the record is only completed
+	// while it still carries that value. This is what keeps a slow owner
+	// honest. Because Claim commits independently of the work transaction, a
+	// request whose work outlives its lease can find its key reclaimed and
+	// re-completed by someone else while it is still running; without this
+	// check its Complete would overwrite the reclaimer's payment and
+	// response, leaving two payments for one key and a stored response no
+	// caller ever received.
+	//
+	// Returns ErrIdempotencyOwnershipLost when the record exists but has
+	// moved on, and ErrIdempotencyRecordNotFound when there is no record at
+	// all. Never reports success without writing.
+	Complete(ctx context.Context, accountID uuid.UUID, key string, claimedAt time.Time, paymentID uuid.UUID, responseStatus int, responseBody []byte, completedAt time.Time) error
 }
 
 var (

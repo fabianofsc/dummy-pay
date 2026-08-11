@@ -408,6 +408,21 @@ func TestCreatePayment_ExpiredLease_ReclaimsAndProceedsAsOwner(t *testing.T) {
 	require.Equal(t, wantBody, rec.ResponseBody)
 }
 
+// A request whose work outlives its lease can have its key reclaimed while it
+// is still running. Complete refuses it, and Execute must surface that as an
+// error rather than reporting a success whose response was never recorded —
+// the failure returns from inside Tx.Within, so the payment it created rolls
+// back with it (proved against a real database in Step 5.3).
+func TestCreatePayment_CompleteLosesOwnership_FailsRatherThanReportingSuccess(t *testing.T) {
+	h := newHarness(t)
+	req := h.request(t, TokenCardApproved)
+	h.idempotency.completeLosesOwnership = true
+
+	got, err := h.uc.Execute(context.Background(), req, testEncoder)
+	require.ErrorIs(t, err, ErrIdempotencyOwnershipLost)
+	require.Equal(t, CreatePaymentResult{}, got, "a failed Execute must return no result")
+}
+
 // Two requests can race to reclaim the same abandoned key. The loser is told
 // the key is in flight — because, thanks to the winner, it now is.
 func TestCreatePayment_ExpiredLease_LosingTheReclaimRace_Conflicts(t *testing.T) {

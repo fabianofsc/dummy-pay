@@ -171,7 +171,11 @@ func (uc *CreatePaymentUseCase) Execute(ctx context.Context, req CreatePaymentRe
 		}
 
 		status, body := encode(p)
-		if err := uc.deps.Idempotency.Complete(ctx, req.AccountID, req.IdempotencyKey, p.ID, status, body, now); err != nil {
+		// now is this request's ownership token: it is the claimedAt a fresh
+		// Claim wrote, and equally the one a successful Reclaim wrote, so it
+		// is correct on both paths into this flow. Complete refuses if the
+		// key has moved on to someone else in the meantime.
+		if err := uc.deps.Idempotency.Complete(ctx, req.AccountID, req.IdempotencyKey, now, p.ID, status, body, now); err != nil {
 			return fmt.Errorf("complete idempotency key: %w", err)
 		}
 

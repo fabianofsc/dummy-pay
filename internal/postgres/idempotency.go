@@ -124,24 +124,55 @@ func (s *IdempotencyStore) Load(ctx context.Context, accountID uuid.UUID, key st
 // reproduces the original response byte for byte rather than a
 // re-serialisation of it (spec §3).
 //
-// Matching no row is reported as payment.ErrIdempotencyRecordNotFound: a
-// silent no-op here would leave the caller believing a replayable response was
-// recorded when none was.
-func (s *IdempotencyStore) Complete(ctx context.Context, accountID uuid.UUID, key string, paymentID uuid.UUID, responseStatus int, responseBody []byte, completedAt time.Time) error {
+// The update is conditional on `claimed_at = $7`, which makes claimedAt an
+// ownership token rather than a stored value: the caller passes the claim it
+// believes it holds, and the write happens only while the row still carries
+// it. This is the counterweight to Claim committing outside the work
+// transaction (see Reclaim). Without it a request whose work outran its lease
+// would overwrite the row of whoever reclaimed the key in the meantime,
+// leaving two payments behind one idempotency key and a stored response that
+// was never returned to anybody — a replay would then hand that response to a
+// caller as though it were the original.
+//
+// Matching no row is never silent: a Complete that reports success without
+// writing would leave the caller believing a replayable response was
+// recorded. The two ways to match nothing are told apart deliberately, because
+// they mean opposite things to whoever reads the log — a missing record is a
+// bug in the calling code, while a lost claim is a lease that wants to be
+// longer, or a request that wants to be faster.
+func (s *IdempotencyStore) Complete(ctx context.Context, accountID uuid.UUID, key string, claimedAt time.Time, paymentID uuid.UUID, responseStatus int, responseBody []byte, completedAt time.Time) error {
 	tag, err := querier(ctx, s.pool).Exec(ctx,
 		`UPDATE idempotency_keys
 		 SET state = 'COMPLETED', payment_id = $3, response_status = $4,
 		     response_body = $5, completed_at = $6
-		 WHERE account_id = $1 AND idempotency_key = $2`,
-		accountID, key, paymentID, responseStatus, responseBody, completedAt,
+		 WHERE account_id = $1 AND idempotency_key = $2
+		   AND state = 'IN_FLIGHT' AND claimed_at = $7`,
+		accountID, key, paymentID, responseStatus, responseBody, completedAt, claimedAt,
 	)
 	if err != nil {
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return payment.ErrIdempotencyRecordNotFound
+		return s.whyCompleteMatchedNothing(ctx, accountID, key)
 	}
 	return nil
+}
+
+// whyCompleteMatchedNothing distinguishes "no such record" from "the record
+// moved on without you". One extra read is acceptable here because it runs
+// only on a path that has already failed, and the answer changes what an
+// operator should do about it.
+//
+// A record that exists but did not match is reported as ownership lost —
+// whether it is IN_FLIGHT under someone else's claim or already COMPLETED,
+// the caller no longer holds the right to write it.
+func (s *IdempotencyStore) whyCompleteMatchedNothing(ctx context.Context, accountID uuid.UUID, key string) error {
+	if _, err := s.Load(ctx, accountID, key); err != nil {
+		// Includes payment.ErrIdempotencyRecordNotFound, which is the answer
+		// when nothing was ever claimed under this key.
+		return err
+	}
+	return payment.ErrIdempotencyOwnershipLost
 }
 
 // Reclaim takes over an abandoned IN_FLIGHT record: a conditional UPDATE that
@@ -157,19 +188,21 @@ func (s *IdempotencyStore) Complete(ctx context.Context, accountID uuid.UUID, ke
 // lease, not past it. Losing is reported as ok=false with a nil error, exactly
 // as in Claim above.
 //
-// Complete deliberately carries no ownership token, and the obvious race — a
-// slow original owner completing a key someone else has already reclaimed,
-// overwriting the reclaimer's payment and response with stale data — cannot
-// occur here by construction. Spec §4.1 puts Claim, the work, and Complete in
-// one transaction. Under READ COMMITTED a row inserted by an open, uncommitted
-// transaction is invisible to every other transaction, so while that
-// transaction runs no other process can see the IN_FLIGHT row at all, let
-// alone reclaim it. A row only becomes reclaimable if the transaction that
-// claimed it committed the claim and never completed it, which happens only
-// when the owning process died — and a dead process never calls Complete. A
-// live process completing outside the transaction that claimed would itself
-// violate spec §4.1; that is the atomicity guarantee's job to enforce, not
-// something to patch around with a token here.
+// Reclaim only has anything to do because Claim commits on its own, before
+// and outside the transaction that does the work. That ordering is the whole
+// point of the lease: were the claim part of the work transaction, a process
+// dying mid-flight would roll its claim back along with everything else,
+// leaving no IN_FLIGHT row for anyone to reclaim and no abandoned key for the
+// lease to recover (ADR-0007).
+//
+// The price is that "reclaimable" and "abandoned" are not the same thing. A
+// live but slow owner — a long GC pause, a stalled query, a lease configured
+// shorter than the work takes — is indistinguishable from a dead one from
+// here, so its key can be reclaimed out from under it while it is still
+// working. Nothing in this function can prevent that, and it should not try:
+// the lease is a timeout, and timeouts are sometimes wrong. What must not
+// happen is the slow owner then finishing and overwriting the reclaimer's
+// work, and that is refused by Complete's claimed_at token, not here.
 func (s *IdempotencyStore) Reclaim(ctx context.Context, accountID uuid.UUID, key string, cutoff, now time.Time) (bool, error) {
 	var reclaimedBy uuid.UUID
 	err := querier(ctx, s.pool).QueryRow(ctx,

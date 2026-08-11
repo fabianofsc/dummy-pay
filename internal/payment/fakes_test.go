@@ -86,6 +86,11 @@ type fakeIdempotencyStore struct {
 	// reclaimLoses forces Reclaim to report ok=false, simulating another
 	// process taking over the abandoned key first (spec §4.1).
 	reclaimLoses bool
+	// completeLosesOwnership forces Complete to report
+	// ErrIdempotencyOwnershipLost, simulating this caller's lease expiring
+	// and the key being reclaimed while its work transaction was still
+	// running.
+	completeLosesOwnership bool
 }
 
 func newFakeIdempotencyStore() *fakeIdempotencyStore {
@@ -136,8 +141,11 @@ func (s *fakeIdempotencyStore) Reclaim(_ context.Context, accountID uuid.UUID, k
 	return true, nil
 }
 
-func (s *fakeIdempotencyStore) Complete(_ context.Context, accountID uuid.UUID, key string, paymentID uuid.UUID, responseStatus int, responseBody []byte, completedAt time.Time) error {
+func (s *fakeIdempotencyStore) Complete(_ context.Context, accountID uuid.UUID, key string, claimedAt time.Time, paymentID uuid.UUID, responseStatus int, responseBody []byte, completedAt time.Time) error {
 	s.completeCalls++
+	if s.completeLosesOwnership {
+		return ErrIdempotencyOwnershipLost
+	}
 	k := idempotencyKey{accountID, key}
 	rec, ok := s.records[k]
 	if !ok {
@@ -145,6 +153,11 @@ func (s *fakeIdempotencyStore) Complete(_ context.Context, accountID uuid.UUID, 
 	}
 	if rec.State != IdempotencyInFlight {
 		return errors.New("fake idempotency store: complete on a record that is not IN_FLIGHT")
+	}
+	// The same ownership check the real store makes in SQL: the caller must
+	// still hold the claim it is completing.
+	if !rec.ClaimedAt.Equal(claimedAt) {
+		return ErrIdempotencyOwnershipLost
 	}
 	rec.State = IdempotencyCompleted
 	rec.PaymentID = paymentID

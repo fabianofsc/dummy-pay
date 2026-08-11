@@ -217,7 +217,7 @@ func TestIdempotencyStore_Reclaim_CompletedRecord_ReturnsNotOk(t *testing.T) {
 	require.True(t, ok)
 
 	body := []byte(`{"status":"APPROVED"}`)
-	require.NoError(t, store.Complete(ctx, accountID, "key-1", p.ID, 201, body, completedAt))
+	require.NoError(t, store.Complete(ctx, accountID, "key-1", t0, p.ID, 201, body, completedAt))
 
 	// The timestamp condition is satisfied by a wide margin; state is the only
 	// thing refusing this.
@@ -265,7 +265,7 @@ func TestIdempotencyStore_Complete_StoresPaymentResponseAndTimestamp(t *testing.
 	require.True(t, ok)
 
 	body := []byte(`{"payment_id":"pay_x",  "status":"APPROVED"}`)
-	require.NoError(t, store.Complete(ctx, accountID, "key-1", p.ID, 201, body, completedAt))
+	require.NoError(t, store.Complete(ctx, accountID, "key-1", claimedAt, p.ID, 201, body, completedAt))
 
 	got, err := store.Load(ctx, accountID, "key-1")
 	require.NoError(t, err)
@@ -312,7 +312,7 @@ func TestIdempotencyStore_Load_Replay_ReturnsByteIdenticalBody(t *testing.T) {
 	require.True(t, ok)
 
 	body := []byte("{\n  \"status\" : \"APPROVED\",\n  \"amount\":10990\n}")
-	require.NoError(t, store.Complete(ctx, accountID, "key-1", p.ID, 201, body, completedAt))
+	require.NoError(t, store.Complete(ctx, accountID, "key-1", claimedAt, p.ID, 201, body, completedAt))
 
 	firstLoad, err := store.Load(ctx, accountID, "key-1")
 	require.NoError(t, err)
@@ -340,8 +340,124 @@ func TestIdempotencyStore_Complete_UnknownKey_ReturnsErrIdempotencyRecordNotFoun
 
 	store := NewIdempotencyStore(pool)
 
-	err := store.Complete(ctx, uuid.New(), "never-claimed", uuid.New(), 201, []byte(`{}`), now)
+	err := store.Complete(ctx, uuid.New(), "never-claimed", now, uuid.New(), 201, []byte(`{}`), now)
 	require.ErrorIs(t, err, payment.ErrIdempotencyRecordNotFound)
+}
+
+// TestIdempotencyStore_Complete_AfterAnotherRequestReclaimed_ReturnsErrIdempotencyOwnershipLost
+// closes the race that the lease design creates and the rest of this file
+// does not reach.
+//
+// Claim commits on its own, outside the transaction that does the work —
+// deliberately, because a claim rolled back with a dying process would leave
+// nothing to reclaim and the lease would protect against nothing. The cost is
+// that a *live* owner can be slow: a GC pause, a stalled query, or simply a
+// lease configured shorter than the work takes. While it is still running its
+// key can expire, be reclaimed by another request, and be completed by that
+// request with a different payment. If the slow owner's Complete were
+// unconditional it would then overwrite the reclaimer's row: two payments for
+// one idempotency key, and a stored response that no caller ever received —
+// a replay would hand back a payment that was never returned to anyone.
+//
+// The claimed_at token is what refuses it. Here the reclaim moves claimed_at
+// from t0 to t1, and the original owner completes with the t0 it still
+// believes it holds.
+func TestIdempotencyStore_Complete_AfterAnotherRequestReclaimed_ReturnsErrIdempotencyOwnershipLost(t *testing.T) {
+	pool := NewTestDB(t)
+	ctx := context.Background()
+	t0 := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+	t1 := t0.Add(45 * time.Second)
+
+	accountID, err := SeedAccount(ctx, pool, uuid.New(), "test_account_complete_stale", t0)
+	require.NoError(t, err)
+
+	payments := NewPaymentRepository(pool)
+	stale := newTestPayment(t, accountID, payment.TokenCardApproved, t0)
+	require.NoError(t, payments.Insert(ctx, stale))
+
+	store := NewIdempotencyStore(pool)
+	fp := testFingerprint(t, "checkout:123")
+
+	// The original owner claims at t0 and then stalls.
+	ok, err := store.Claim(ctx, accountID, "key-1", fp, t0)
+	require.NoError(t, err)
+	require.True(t, ok)
+
+	// Another request finds the lease expired and takes the key over at t1.
+	ok, err = store.Reclaim(ctx, accountID, "key-1", t0.Add(time.Millisecond), t1)
+	require.NoError(t, err)
+	require.True(t, ok)
+
+	// The original owner finally finishes and tries to complete with the
+	// claim it still thinks it holds.
+	err = store.Complete(ctx, accountID, "key-1", t0, stale.ID, 201,
+		[]byte(`{"status":"APPROVED","stale":true}`), t1.Add(time.Second))
+	require.ErrorIs(t, err, payment.ErrIdempotencyOwnershipLost)
+
+	// And wrote nothing: the record is exactly as the reclaimer left it.
+	got, err := store.Load(ctx, accountID, "key-1")
+	require.NoError(t, err)
+
+	want := payment.IdempotencyRecord{
+		AccountID:          accountID,
+		IdempotencyKey:     "key-1",
+		RequestFingerprint: fp,
+		State:              payment.IdempotencyInFlight,
+		ClaimedAt:          t1,
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("record after a stale owner's Complete (-want +got):\n%s", diff)
+	}
+}
+
+// The reclaimer, holding the current claim, completes normally. This is the
+// positive half of the ownership check: it must refuse a stale token without
+// also refusing the legitimate owner that took over.
+func TestIdempotencyStore_Complete_ByTheReclaimer_Succeeds(t *testing.T) {
+	pool := NewTestDB(t)
+	ctx := context.Background()
+	t0 := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+	t1 := t0.Add(45 * time.Second)
+	completedAt := t1.Add(40 * time.Millisecond)
+
+	accountID, err := SeedAccount(ctx, pool, uuid.New(), "test_account_complete_reclaimer", t0)
+	require.NoError(t, err)
+
+	payments := NewPaymentRepository(pool)
+	p := newTestPayment(t, accountID, payment.TokenCardApproved, t1)
+	require.NoError(t, payments.Insert(ctx, p))
+
+	store := NewIdempotencyStore(pool)
+	fp := testFingerprint(t, "checkout:123")
+
+	ok, err := store.Claim(ctx, accountID, "key-1", fp, t0)
+	require.NoError(t, err)
+	require.True(t, ok)
+
+	ok, err = store.Reclaim(ctx, accountID, "key-1", t0.Add(time.Millisecond), t1)
+	require.NoError(t, err)
+	require.True(t, ok)
+
+	body := []byte(`{"status":"APPROVED"}`)
+	require.NoError(t, store.Complete(ctx, accountID, "key-1", t1, p.ID, 201, body, completedAt))
+
+	got, err := store.Load(ctx, accountID, "key-1")
+	require.NoError(t, err)
+
+	want := payment.IdempotencyRecord{
+		AccountID:          accountID,
+		IdempotencyKey:     "key-1",
+		RequestFingerprint: fp,
+		State:              payment.IdempotencyCompleted,
+		PaymentID:          p.ID,
+		ResponseStatus:     201,
+		ResponseBody:       body,
+		ClaimedAt:          t1,
+		CompletedAt:        completedAt,
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Load after the reclaimer's Complete (-want +got):\n%s", diff)
+	}
 }
 
 func TestIdempotencyStore_Load_UnknownKey_ReturnsErrIdempotencyRecordNotFound(t *testing.T) {
