@@ -23,7 +23,7 @@ from the actual code, not just the step's prose below.
 
 `[ ]` not started · `[~]` in progress · `[x]` done
 
-**Documentation 5/6 (1 in progress) · Steps 23/36 · Acceptance criteria 0/13** —
+**Documentation 5/6 (1 in progress) · Steps 25/36 · Acceptance criteria 0/13** —
 updated 2026-08-11.
 
 ### Documentation (5/6)
@@ -82,10 +82,10 @@ updated 2026-08-11.
 - [x] **7.1** — AES-256-GCM secret encryption — `internal/webhook/secret.go`
 - [x] **7.2** — Create subscription endpoint — `internal/payment/subscription.go`, `internal/postgres/subscription.go`, `internal/http/handler_create_subscription.go` *(second-active-subscription rejection proved against the real partial unique index, not an application check)*
 
-### Phase 8 — Webhook payload and signing (0/2)
+### Phase 8 — Webhook payload and signing (2/2)
 
-- [ ] **8.1** — Payload serialisation and HMAC
-- [ ] **8.2** — Sender against `httptest`
+- [x] **8.1** — Payload serialisation and HMAC — `internal/webhook/payload.go` *(fixture byte-for-byte match to README example; HMAC fixture computed independently via `openssl dgst -hmac`)*
+- [x] **8.2** — Sender against `httptest` — `internal/webhook/sender.go`, `internal/payment/ports.go` (`Sender` port)
 
 ### Phase 9 — Worker (0/3)
 
