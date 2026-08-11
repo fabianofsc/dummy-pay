@@ -70,18 +70,67 @@ func (uc *CreatePaymentUseCase) Execute(ctx context.Context, req CreatePaymentRe
 	fp := Fingerprint(req.ReferenceID, req.Amount, req.Currency, req.Token)
 	now := uc.deps.Clock.Now()
 
-	claimed, err := uc.deps.Idempotency.Claim(ctx, req.AccountID, req.IdempotencyKey, fp, now)
+	owns, err := uc.deps.Idempotency.Claim(ctx, req.AccountID, req.IdempotencyKey, fp, now)
 	if err != nil {
 		return CreatePaymentResult{}, fmt.Errorf("claim idempotency key: %w", err)
 	}
-	if !claimed {
-		// Someone else owns this key. Reading the existing record and
-		// branching on it — replay, key reuse, expired-lease reclaim — is
-		// spec §4.1's table, implemented in a later step. Until then the
-		// conservative answer is the in-flight one.
-		return CreatePaymentResult{}, ErrIdempotencyConflict
+
+	if !owns {
+		// Someone else got there first. Read the existing record and branch
+		// on it — spec §4.1's table.
+		rec, err := uc.deps.Idempotency.Load(ctx, req.AccountID, req.IdempotencyKey)
+		if err != nil {
+			return CreatePaymentResult{}, fmt.Errorf("load idempotency record: %w", err)
+		}
+
+		// The fingerprint is checked first: reusing a key for a different
+		// body is a client error regardless of what the original request is
+		// doing (spec §4.1).
+		if rec.RequestFingerprint != fp {
+			return CreatePaymentResult{}, ErrIdempotencyKeyReuse
+		}
+
+		switch rec.State {
+		case IdempotencyCompleted:
+			// A replay. Return exactly what the original returned; do not
+			// create anything.
+			p, err := uc.deps.Payments.FindByID(ctx, rec.PaymentID)
+			if err != nil {
+				return CreatePaymentResult{}, fmt.Errorf("load replayed payment: %w", err)
+			}
+			return CreatePaymentResult{
+				Payment:        p,
+				ResponseStatus: rec.ResponseStatus,
+				ResponseBody:   rec.ResponseBody,
+				Replayed:       true,
+			}, nil
+
+		case IdempotencyInFlight:
+			cutoff := now.Add(-uc.deps.IdempotencyLease)
+			if !rec.ClaimedAt.Before(cutoff) {
+				// The first request still holds the key.
+				return CreatePaymentResult{}, ErrIdempotencyConflict
+			}
+			// The lease expired — the owner died mid-flight. Take over. The
+			// conditional update settles a race between two reclaimers the
+			// same way the original claim did: one wins, the rest conflict.
+			reclaimed, err := uc.deps.Idempotency.Reclaim(ctx, req.AccountID, req.IdempotencyKey, cutoff, now)
+			if err != nil {
+				return CreatePaymentResult{}, fmt.Errorf("reclaim idempotency key: %w", err)
+			}
+			if !reclaimed {
+				return CreatePaymentResult{}, ErrIdempotencyConflict
+			}
+			// Reclaimed: this request now owns the key, and falls through to
+			// the owner flow below.
+
+		default:
+			return CreatePaymentResult{}, fmt.Errorf("unknown idempotency state %q", rec.State)
+		}
 	}
 
+	// This request owns the key — either from a fresh claim or by reclaiming
+	// an abandoned one — so it does the work, in one transaction.
 	var result CreatePaymentResult
 	err = uc.deps.Tx.Within(ctx, func(ctx context.Context) error {
 		p := NewPayment(uc.deps.IDs.NewID(), req.AccountID, uc.deps.IDs.NewID(), req.ReferenceID, req.Amount, req.Currency, req.Token, now)

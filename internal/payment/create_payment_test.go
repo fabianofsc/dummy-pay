@@ -12,7 +12,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const testProcessingDelay = 3 * time.Second
+const (
+	testProcessingDelay  = 3 * time.Second
+	testIdempotencyLease = 30 * time.Second
+)
 
 // testEncoder stands in for the HTTP adapter's response encoder: it renders
 // a Payment into the exact status and bytes the use case must store and
@@ -71,7 +74,7 @@ func newHarness(t *testing.T) *harness {
 		Clock:            h.clock,
 		IDs:              clock.UUIDv7Generator{},
 		ProcessingDelay:  testProcessingDelay,
-		IdempotencyLease: 30 * time.Second,
+		IdempotencyLease: testIdempotencyLease,
 	})
 	return h
 }
@@ -89,6 +92,25 @@ func (h *harness) request(t *testing.T, token ScenarioToken) CreatePaymentReques
 		Currency:       CurrencyBRL,
 		Token:          token,
 	}
+}
+
+// fingerprintOf computes the fingerprint the use case will compute for req,
+// so a test can seed an idempotency record that matches — or, by passing a
+// changed request, one that deliberately does not.
+func fingerprintOf(req CreatePaymentRequest) [32]byte {
+	return Fingerprint(req.ReferenceID, req.Amount, req.Currency, req.Token)
+}
+
+// requireNothingCreated asserts that the call under test did not enter the
+// owner flow: no transaction, no payment, no work, no delivery, and no
+// completion of the idempotency record.
+func (h *harness) requireNothingCreated(t *testing.T) {
+	t.Helper()
+	require.Equal(t, 0, h.tx.calls, "no transaction should have been opened")
+	require.Empty(t, h.payments.inserted, "no payment should have been inserted")
+	require.Empty(t, h.outbox.entries, "no work should have been enqueued")
+	require.Empty(t, h.deliveries.drafts, "no delivery should have been created")
+	require.Equal(t, 0, h.idempotency.completeCalls, "the idempotency record should not have been completed")
 }
 
 func TestCreatePayment_HappyPaths(t *testing.T) {
@@ -226,4 +248,184 @@ func TestCreatePayment_SubscriptionNotCoveringEvent_CreatesNoDelivery(t *testing
 	require.Empty(t, h.outbox.entriesOfKind(OutboxDeliverWebhook))
 	require.Equal(t, StatusApproved, got.Payment.Status)
 	require.Len(t, h.payments.inserted, 1)
+}
+
+// A replay — same key, same body, first request already COMPLETED — returns
+// the stored response verbatim and creates nothing at all (spec §4.1).
+func TestCreatePayment_Replay_ReturnsStoredResponseAndCreatesNothing(t *testing.T) {
+	h := newHarness(t)
+	req := h.request(t, TokenCardApproved)
+
+	original := NewPayment(uuid.New(), h.accountID, uuid.New(), req.ReferenceID, req.Amount, req.Currency, req.Token, h.start)
+	h.payments.seed(original)
+
+	wantStatus, wantBody := testEncoder(original)
+	h.idempotency.seed(IdempotencyRecord{
+		AccountID:          h.accountID,
+		IdempotencyKey:     req.IdempotencyKey,
+		RequestFingerprint: fingerprintOf(req),
+		State:              IdempotencyCompleted,
+		PaymentID:          original.ID,
+		ResponseStatus:     wantStatus,
+		ResponseBody:       wantBody,
+		ClaimedAt:          h.start,
+		CompletedAt:        h.start,
+	})
+
+	got, err := h.uc.Execute(context.Background(), req, testEncoder)
+	require.NoError(t, err)
+
+	require.True(t, got.Replayed)
+	require.Equal(t, wantStatus, got.ResponseStatus)
+	require.Equal(t, wantBody, got.ResponseBody)
+	if diff := cmp.Diff(original, got.Payment); diff != "" {
+		t.Errorf("replayed payment (-want +got):\n%s", diff)
+	}
+
+	// The whole point: the second request did no work.
+	h.requireNothingCreated(t)
+}
+
+// The fingerprint is checked before the state, so a mismatched body is a
+// client error whatever the original request is doing (spec §4.1).
+func TestCreatePayment_KeyReusedWithDifferentBody_IsRejected(t *testing.T) {
+	states := []IdempotencyState{IdempotencyInFlight, IdempotencyCompleted}
+
+	for _, state := range states {
+		t.Run(string(state), func(t *testing.T) {
+			h := newHarness(t)
+			req := h.request(t, TokenCardApproved)
+
+			// The first request used the same key for a different body.
+			other := req
+			other.ReferenceID = "checkout:999"
+			require.NotEqual(t, fingerprintOf(req), fingerprintOf(other))
+
+			rec := IdempotencyRecord{
+				AccountID:          h.accountID,
+				IdempotencyKey:     req.IdempotencyKey,
+				RequestFingerprint: fingerprintOf(other),
+				State:              state,
+				ClaimedAt:          h.start,
+			}
+			if state == IdempotencyCompleted {
+				original := NewPayment(uuid.New(), h.accountID, uuid.New(), other.ReferenceID, other.Amount, other.Currency, other.Token, h.start)
+				h.payments.seed(original)
+				rec.PaymentID = original.ID
+				rec.ResponseStatus, rec.ResponseBody = testEncoder(original)
+				rec.CompletedAt = h.start
+			}
+			h.idempotency.seed(rec)
+
+			_, err := h.uc.Execute(context.Background(), req, testEncoder)
+			require.ErrorIs(t, err, ErrIdempotencyKeyReuse)
+
+			h.requireNothingCreated(t)
+			require.Equal(t, 0, h.idempotency.reclaimCalls, "a mismatched fingerprint must never reclaim")
+		})
+	}
+}
+
+// A second request arriving while the first is still in flight, within its
+// lease, is a conflict (spec §4.1). The lease boundary is inclusive: a
+// record claimed exactly one lease ago is still held.
+func TestCreatePayment_InFlightWithinLease_Conflicts(t *testing.T) {
+	tests := []struct {
+		name       string
+		claimedAgo time.Duration
+	}{
+		{"just claimed", 0},
+		{"halfway through the lease", testIdempotencyLease / 2},
+		{"exactly at the lease boundary", testIdempotencyLease},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newHarness(t)
+			req := h.request(t, TokenCardApproved)
+
+			h.idempotency.seed(IdempotencyRecord{
+				AccountID:          h.accountID,
+				IdempotencyKey:     req.IdempotencyKey,
+				RequestFingerprint: fingerprintOf(req),
+				State:              IdempotencyInFlight,
+				ClaimedAt:          h.start.Add(-tt.claimedAgo),
+			})
+
+			_, err := h.uc.Execute(context.Background(), req, testEncoder)
+			require.ErrorIs(t, err, ErrIdempotencyConflict)
+
+			h.requireNothingCreated(t)
+			require.Equal(t, 0, h.idempotency.reclaimCalls, "a held lease must not be reclaimed")
+		})
+	}
+}
+
+// An IN_FLIGHT record whose lease has expired — the process that claimed it
+// died mid-flight — is reclaimable, and the reclaiming request proceeds as
+// the owner (spec §4.1).
+func TestCreatePayment_ExpiredLease_ReclaimsAndProceedsAsOwner(t *testing.T) {
+	h := newHarness(t)
+	req := h.request(t, TokenCardProcessingApproved)
+
+	h.idempotency.seed(IdempotencyRecord{
+		AccountID:          h.accountID,
+		IdempotencyKey:     req.IdempotencyKey,
+		RequestFingerprint: fingerprintOf(req),
+		State:              IdempotencyInFlight,
+		ClaimedAt:          h.start.Add(-testIdempotencyLease - time.Nanosecond),
+	})
+
+	got, err := h.uc.Execute(context.Background(), req, testEncoder)
+	require.NoError(t, err)
+
+	require.Equal(t, 1, h.idempotency.reclaimCalls)
+	require.False(t, got.Replayed, "a reclaimed key produces a new payment, not a replay")
+
+	// The full owner flow ran: payment, settlement work, delivery, response.
+	require.Equal(t, 1, h.tx.calls)
+	require.Len(t, h.payments.inserted, 1)
+	require.Equal(t, StatusProcessing, got.Payment.Status)
+	if diff := cmp.Diff(got.Payment, h.payments.inserted[0]); diff != "" {
+		t.Errorf("inserted payment differs from the returned one (-returned +inserted):\n%s", diff)
+	}
+
+	settleWork := h.outbox.entriesOfKind(OutboxSettlePayment)
+	require.Len(t, settleWork, 1)
+	require.Equal(t, got.Payment.ID, settleWork[0].SubjectID)
+	require.True(t, h.start.Add(testProcessingDelay).Equal(settleWork[0].DueAt))
+	require.Len(t, h.deliveries.drafts, 1)
+
+	wantStatus, wantBody := testEncoder(got.Payment)
+	require.Equal(t, wantStatus, got.ResponseStatus)
+	require.Equal(t, wantBody, got.ResponseBody)
+
+	require.Equal(t, 1, h.idempotency.completeCalls)
+	rec, err := h.idempotency.Load(context.Background(), h.accountID, req.IdempotencyKey)
+	require.NoError(t, err)
+	require.Equal(t, IdempotencyCompleted, rec.State)
+	require.Equal(t, got.Payment.ID, rec.PaymentID)
+	require.Equal(t, wantBody, rec.ResponseBody)
+}
+
+// Two requests can race to reclaim the same abandoned key. The loser is told
+// the key is in flight — because, thanks to the winner, it now is.
+func TestCreatePayment_ExpiredLease_LosingTheReclaimRace_Conflicts(t *testing.T) {
+	h := newHarness(t)
+	req := h.request(t, TokenCardApproved)
+
+	h.idempotency.seed(IdempotencyRecord{
+		AccountID:          h.accountID,
+		IdempotencyKey:     req.IdempotencyKey,
+		RequestFingerprint: fingerprintOf(req),
+		State:              IdempotencyInFlight,
+		ClaimedAt:          h.start.Add(-2 * testIdempotencyLease),
+	})
+	h.idempotency.reclaimLoses = true
+
+	_, err := h.uc.Execute(context.Background(), req, testEncoder)
+	require.ErrorIs(t, err, ErrIdempotencyConflict)
+
+	require.Equal(t, 1, h.idempotency.reclaimCalls, "the expired lease should have been reclaimed")
+	h.requireNothingCreated(t)
 }
