@@ -23,7 +23,7 @@ from the actual code, not just the step's prose below.
 
 `[ ]` not started · `[~]` in progress · `[x]` done
 
-**Documentation 5/6 (1 in progress) · Steps 21/36 · Acceptance criteria 0/13** —
+**Documentation 5/6 (1 in progress) · Steps 23/36 · Acceptance criteria 0/13** —
 updated 2026-08-11.
 
 ### Documentation (5/6)
@@ -77,10 +77,10 @@ updated 2026-08-11.
 - [x] **6.2** — Decoding, strict fields, validation mapping — `internal/http/handler_create_payment.go`, `internal/http/handler_create_payment_test.go`
 - [x] **6.3** — Response shape — `internal/http/types.go`, `internal/http/handler_create_payment_response_test.go`
 
-### Phase 7 — Subscriptions (0/2) *(in progress)*
+### Phase 7 — Subscriptions (2/2)
 
-- [ ] **7.1** — AES-256-GCM secret encryption
-- [ ] **7.2** — Create subscription endpoint
+- [x] **7.1** — AES-256-GCM secret encryption — `internal/webhook/secret.go`
+- [x] **7.2** — Create subscription endpoint — `internal/payment/subscription.go`, `internal/postgres/subscription.go`, `internal/http/handler_create_subscription.go` *(second-active-subscription rejection proved against the real partial unique index, not an application check)*
 
 ### Phase 8 — Webhook payload and signing (0/2)
 
