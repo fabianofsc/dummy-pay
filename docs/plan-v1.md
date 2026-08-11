@@ -23,7 +23,7 @@ from the actual code, not just the step's prose below.
 
 `[ ]` not started · `[~]` in progress · `[x]` done
 
-**Documentation 5/6 (1 in progress) · Steps 29/36 · Acceptance criteria 0/13** —
+**Documentation 5/6 (1 in progress) · Steps 30/36 · Acceptance criteria 0/13** —
 updated 2026-08-11.
 
 ### Documentation (5/6)
@@ -97,9 +97,9 @@ updated 2026-08-11.
 
 - [x] **10.1** — Retry endpoint, byte-identical resend — `internal/payment/retry_delivery.go`, `internal/http/handler_retry_delivery.go` *(retry-then-worker test proves byte-identical resend with incremented attempt_count; account scoping proved against the real join)*
 
-### Phase 11 — Assembly (0/3)
+### Phase 11 — Assembly (1/3) *(in progress)*
 
-- [ ] **11.1** — Wiring and startup
+- [x] **11.1** — Wiring and startup — `cmd/dummypay/main.go`, `internal/http/router.go` (`NewProductionRouter`), `internal/payment/create_subscription.go`, `internal/postgres/migrate.go` *(`make run` manually verified end-to-end against the compose database — health, auth, create-payment, idempotent replay, webhook-subscription creation and its 409 duplicate, retry's 404 on an unknown delivery; surfaced and fixed a real response-encoding bug no earlier test had caught, with a regression test added — see commit)*
 - [ ] **11.2** — Acceptance walkthrough
 - [ ] **11.3** — README updated for a real clone-and-run
 
