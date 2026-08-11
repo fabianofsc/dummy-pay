@@ -86,10 +86,6 @@ func handleHealth(w http.ResponseWriter, _ *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
-func handleCreatePayment(w http.ResponseWriter, r *http.Request) {
-	http.Error(w, "Not Implemented", http.StatusNotImplemented)
-}
-
 func handleCreateSubscription(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "Not Implemented", http.StatusNotImplemented)
 }
