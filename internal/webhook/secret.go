@@ -4,8 +4,23 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 )
+
+// secretRandomBytes is the number of random bytes rendered into the
+// generated subscription secret's base64url portion (spec §4.2).
+const secretRandomBytes = 32
+
+// GenerateSecret produces a new webhook subscription secret: whsec_ followed
+// by secretRandomBytes of crypto/rand, base64url-encoded (spec §4.2).
+func GenerateSecret() (string, error) {
+	raw := make([]byte, secretRandomBytes)
+	if _, err := rand.Read(raw); err != nil {
+		return "", fmt.Errorf("generate secret: %w", err)
+	}
+	return "whsec_" + base64.RawURLEncoding.EncodeToString(raw), nil
+}
 
 // keyLength is the required key size for AES-256. aes.NewCipher also accepts
 // 16 and 24 bytes (AES-128/192), so this is checked explicitly rather than

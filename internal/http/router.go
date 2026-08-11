@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+
+	"dummypay/internal/payment"
 )
 
 // AuthConfig holds the technical account credentials used to authenticate
@@ -17,6 +19,24 @@ import (
 type AuthConfig struct {
 	AccountKeyID     string
 	AccountKeySecret string
+}
+
+// NewRouterWithUseCase builds a router with an injected use case for testing.
+// Production uses NewRouter.
+func NewRouterWithUseCase(auth AuthConfig, uc *payment.CreatePaymentUseCase, accountRepo interface{ /* payment repository or compatible */ }) *chi.Mux {
+	r := chi.NewRouter()
+
+	r.Get("/health", handleHealth)
+
+	r.Route("/v1", func(v1 chi.Router) {
+		v1.Use(basicAuthMiddleware(auth))
+
+		v1.Post("/payments", makeHandleCreatePayment(uc, auth))
+		v1.Post("/webhook-subscriptions", handleCreateSubscription)
+		v1.Post("/webhook-deliveries/{delivery_id}/retry", handleRetryDelivery)
+	})
+
+	return r
 }
 
 // NewRouter builds the top-level router. /health is unauthenticated and
@@ -84,10 +104,6 @@ func handleHealth(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-}
-
-func handleCreateSubscription(w http.ResponseWriter, r *http.Request) {
-	http.Error(w, "Not Implemented", http.StatusNotImplemented)
 }
 
 func handleRetryDelivery(w http.ResponseWriter, r *http.Request) {

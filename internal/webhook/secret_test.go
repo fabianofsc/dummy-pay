@@ -94,3 +94,22 @@ func TestEncryptSecret_WrongKeyLength_ReturnsError(t *testing.T) {
 	_, _, err := webhook.EncryptSecret(shortKey, []byte("data"))
 	require.Error(t, err)
 }
+
+// TestGenerateSecret_HasWhsecPrefix verifies the generated secret is
+// rendered as whsec_ followed by base64url-encoded random bytes (spec §4.2).
+func TestGenerateSecret_HasWhsecPrefix(t *testing.T) {
+	secret, err := webhook.GenerateSecret()
+	require.NoError(t, err)
+	require.True(t, len(secret) > 6 && secret[:6] == "whsec_",
+		"secret must start with whsec_, got %s", secret)
+}
+
+// TestGenerateSecret_ProducesDifferentValues verifies each call generates
+// fresh random bytes.
+func TestGenerateSecret_ProducesDifferentValues(t *testing.T) {
+	s1, err := webhook.GenerateSecret()
+	require.NoError(t, err)
+	s2, err := webhook.GenerateSecret()
+	require.NoError(t, err)
+	require.NotEqual(t, s1, s2)
+}
