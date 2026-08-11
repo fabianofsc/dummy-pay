@@ -463,6 +463,11 @@ naming it.
 
 ## 10. Testing
 
+Assertions use `testify/require` for control flow and `cmp.Diff` for struct
+comparison, never `require.Equal` on a timestamped struct
+([ADR-0014](decisions/adr-0014-testify-require-and-go-cmp.md)). Fakes are
+written by hand against the ports in §8.
+
 **Domain and use-case tests** run against in-memory fakes with a test clock. No
 database, no HTTP. These cover the state machine, token mapping, validation, and
 event selection.

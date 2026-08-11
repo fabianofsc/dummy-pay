@@ -23,6 +23,7 @@ down.
 | [0011](adr-0011-embedded-goose-migrations.md) | Version the schema with goose migrations embedded in the binary | Accepted |
 | [0012](adr-0012-injected-clock-scheduler.md) | Inject the clock and express scheduling as data | Accepted |
 | [0013](adr-0013-integration-tests-real-postgres.md) | Test against a real PostgreSQL from docker compose, one schema per test | Accepted |
+| [0014](adr-0014-testify-require-and-go-cmp.md) | Assert with testify/require and compare structs with go-cmp | Accepted |
 
 ## Writing a new one
 

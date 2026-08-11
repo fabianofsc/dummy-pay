@@ -99,12 +99,24 @@ lookup. (ADR-0006)
 
 **Money** — `int64` cents. Never a float, anywhere, for any reason.
 
-**Tests** — standard library `testing`, table-driven, with `google/go-cmp` for
-struct comparison. No assertion framework. Integration tests get their own
-schema; never share state between tests.
+**Tests** — table-driven, on the standard library `testing`. `testify/require`
+for control flow (`NoError`, `ErrorIs`, `True`, `Len`); `cmp.Diff` reported as
+`(-want +got)` for comparing structs. Never `assert` — only `require`. Never
+`testify/mock` or `testify/suite`: fakes are written by hand, and `t.Cleanup`
+covers teardown. Integration tests get their own schema and share no state.
 
-**Dependencies** — the current set is `chi`, `pgx`, `goose`, `google/uuid`, and
-`go-cmp`. Adding another is an architecture decision and needs an ADR.
+> **Never use `require.Equal` on a struct containing a timestamp.** It falls
+> through to `reflect.DeepEqual`, which compares the monotonic reading and the
+> location pointer, so a value that has been through PostgreSQL fails against
+> the original even when the instants are equal. Use `cmp.Diff`, which honours
+> `time.Time`'s own `Equal`. (ADR-0014)
+
+Domain value objects carry an `Equal` method — go-cmp panics on unexported
+fields otherwise, and the method belongs in production code anyway.
+
+**Dependencies** — the current set is `chi`, `pgx`, `goose`, `google/uuid`,
+`go-cmp`, and `testify`. Adding another is an architecture decision and needs an
+ADR.
 
 **Commits** — imperative subject under 72 characters, prefixed by area
 (`feat:`, `fix:`, `docs:`, `test:`, `refactor:`). The body explains why, not

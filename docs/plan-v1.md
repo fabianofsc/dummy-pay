@@ -102,7 +102,8 @@ that satisfies it, so the list is never a summary written after the fact.
 
 - [ ] **12.1** — Dependency direction test
 - [ ] **12.2** — Time discipline check
-- [ ] **12.3** — Suite wall-clock budget
+- [ ] **12.3** — Assertion discipline check
+- [ ] **12.4** — Suite wall-clock budget
 
 ### Acceptance criteria
 
@@ -532,7 +533,16 @@ only because they need the code to guard.
 
 **Done when:** introducing a stray call fails the build.
 
-### Step 12.3 — Suite budget
+### Step 12.3 — Assertion discipline
+
+**Then:** a check failing on `require.Equal` applied to `Payment`, `Delivery`,
+or `Subscription`, and on any import of `testify/assert`, `testify/mock`, or
+`testify/suite` ([ADR-0014](decisions/adr-0014-testify-require-and-go-cmp.md)).
+
+**Done when:** introducing `require.Equal(t, wantPayment, gotPayment)` fails the
+build.
+
+### Step 12.4 — Suite budget
 
 **Then:** a wall-clock budget for the suite, enforced in CI, so a test that
 starts waiting on real time is caught immediately.
