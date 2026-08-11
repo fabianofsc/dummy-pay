@@ -18,94 +18,99 @@ a command whose output can be read.
 Progress tracker. A box is ticked only when that step's **Done when** condition
 has been observed — not when the code was written. Tick it in the same commit
 that satisfies it, so the list is never a summary written after the fact.
+Every ticked item names the file(s) it produced, so "what's done" is one click
+from the actual code, not just the step's prose below.
 
 `[ ]` not started · `[~]` in progress · `[x]` done
 
-### Documentation
+**Documentation 5/6 · Steps 5/36 · Acceptance criteria 0/13** — updated
+2026-08-11.
 
-- [x] **D.1** — README with the full V1 contract
+### Documentation (5/6)
+
+- [x] **D.1** — README with the full V1 contract — `README.md`
 - [x] **D.2** — `docs/pitch.md`
-- [x] **D.3** — 13 ADRs in `docs/decisions/` plus index
+- [x] **D.3** — 14 ADRs in `docs/decisions/` plus index — `docs/decisions/`
 - [x] **D.4** — `docs/spec-v1.md` design specification
 - [x] **D.5** — `docs/plan-v1.md` implementation plan
 - [ ] **D.6** — README "Running locally" filled in, design-phase banner removed *(→ Step 11.3)*
 
-### Phase 0 — Scaffolding
+### Phase 0 — Scaffolding (2/2)
 
-- [~] **0.1** — Repository skeleton: `go mod`, packages, Makefile, compose, `.env.example` *(module, packages, Makefile, compose, `.env.example`, and `GET /health` done; CI still open, tracked as 0.2)*
-- [ ] **0.2** — CI running build, vet, unit and integration tests
+- [x] **0.1** — Repository skeleton — `go.mod`, `internal/*/doc.go`, `Makefile`, `docker-compose.yml`, `.env.example`, `GET /health` (`internal/http/router.go`)
+- [x] **0.2** — CI: build, vet, gofmt, `go test -race` with a postgres service — `.github/workflows/ci.yml` *(authored and verified by running every step locally against a real postgres container, including a deliberately broken test going red; not yet exercised by GitHub Actions itself — no remote is configured for this repository)*
 
-### Phase 1 — Foundations
+### Phase 1 — Foundations (3/3)
 
-- [ ] **1.1** — Configuration parsing and validation
-- [ ] **1.2** — Clock and UUIDv7 generator
-- [ ] **1.3** — Identifier prefix codec
+- [x] **1.1** — Configuration parsing and validation — `internal/config/config.go`
+- [x] **1.2** — Clock and UUIDv7 generator — `internal/payment/ports.go` (ports), `internal/clock/clock.go`, `internal/clock/id.go`
+- [x] **1.3** — Identifier prefix codec — `internal/http/idcodec.go`
 
-### Phase 2 — Domain
+### Phase 2 — Domain (0/3)
 
 - [ ] **2.1** — Value objects: amount, currency, scenario token
 - [ ] **2.2** — Payment state machine
 - [ ] **2.3** — Event selection
 
-### Phase 3 — Persistence
+### Phase 3 — Persistence (0/3)
 
 - [ ] **3.1** — Migrations and integration test harness
 - [ ] **3.2** — Account seeding
 - [ ] **3.3** — Payment repository
 
-### Phase 4 — Idempotency
+### Phase 4 — Idempotency (0/4)
 
 - [ ] **4.1** — Request fingerprinting
 - [ ] **4.2** — Claim and complete
 - [ ] **4.3** — Concurrency: exactly one winner
 - [ ] **4.4** — Lease reclamation
 
-### Phase 5 — Create-payment use case
+### Phase 5 — Create-payment use case (0/3)
 
 - [ ] **5.1** — Happy paths against fakes
 - [ ] **5.2** — Idempotent paths: replay, reuse, conflict
 - [ ] **5.3** — Atomicity under a failing outbox write
 
-### Phase 6 — HTTP: create payment
+### Phase 6 — HTTP: create payment (0/3)
 
 - [ ] **6.1** — Routing and authentication
 - [ ] **6.2** — Decoding, strict fields, validation mapping
 - [ ] **6.3** — Response shape
 
-### Phase 7 — Subscriptions
+### Phase 7 — Subscriptions (0/2)
 
 - [ ] **7.1** — AES-256-GCM secret encryption
 - [ ] **7.2** — Create subscription endpoint
 
-### Phase 8 — Webhook payload and signing
+### Phase 8 — Webhook payload and signing (0/2)
 
 - [ ] **8.1** — Payload serialisation and HMAC
 - [ ] **8.2** — Sender against `httptest`
 
-### Phase 9 — Worker
+### Phase 9 — Worker (0/3)
 
 - [ ] **9.1** — Claiming with `SKIP LOCKED`
 - [ ] **9.2** — Settlement of `PROCESSING` payments
 - [ ] **9.3** — Delivery attempts and status recording
 
-### Phase 10 — Retry
+### Phase 10 — Retry (0/1)
 
 - [ ] **10.1** — Retry endpoint, byte-identical resend
 
-### Phase 11 — Assembly
+### Phase 11 — Assembly (0/3)
 
 - [ ] **11.1** — Wiring and startup
 - [ ] **11.2** — Acceptance walkthrough
 - [ ] **11.3** — README updated for a real clone-and-run
 
-### Phase 12 — Fitness functions
+### Phase 12 — Fitness functions (0/4)
 
 - [ ] **12.1** — Dependency direction test
 - [ ] **12.2** — Time discipline check
 - [ ] **12.3** — Assertion discipline check
 - [ ] **12.4** — Suite wall-clock budget
 
-### Acceptance criteria
+### Acceptance criteria (0/13)
 
 Tracked separately from the phases, because these are what the project is
 judged on. Each is ticked when a test proves it end to end *(→ Step 11.2)*.
@@ -501,7 +506,7 @@ against a real database and an `httptest` consumer.
 
 **Then:** nothing new. Failures here mean an earlier phase was wrong.
 
-**Done when:** all ten acceptance criteria pass.
+**Done when:** every acceptance criterion in the roadmap is checked off.
 
 ### Step 11.3 — README
 

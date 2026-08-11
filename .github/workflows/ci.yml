@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    # PostgreSQL for integration tests (ADR-0013). No other external service
+    # exists for this project.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: dummypay
+          POSTGRES_PASSWORD: dummypay
+          POSTGRES_DB: dummypay
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dummypay"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 15
+
+    env:
+      DUMMYPAY_DATABASE_URL: postgres://dummypay:dummypay@localhost:5432/dummypay?sslmode=disable
+      # GitHub Actions sets CI=true automatically. The integration test
+      # harness introduced in plan step 3.1 checks it to fail loudly instead
+      # of skipping when no database is reachable (ADR-0013 Compliance) — a
+      # skip here would hide a broken guarantee, not just report a missing
+      # local dependency.
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Format check
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "gofmt would reformat:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Test
+        run: go test ./... -race -v
