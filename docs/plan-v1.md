@@ -23,8 +23,8 @@ from the actual code, not just the step's prose below.
 
 `[ ]` not started · `[~]` in progress · `[x]` done
 
-**Documentation 5/6 · Steps 5/36 · Acceptance criteria 0/13** — updated
-2026-08-11.
+**Documentation 5/6 (1 in progress) · Steps 5/36 · Acceptance criteria 0/13** —
+updated 2026-08-11.
 
 ### Documentation (5/6)
 
@@ -33,7 +33,7 @@ from the actual code, not just the step's prose below.
 - [x] **D.3** — 14 ADRs in `docs/decisions/` plus index — `docs/decisions/`
 - [x] **D.4** — `docs/spec-v1.md` design specification
 - [x] **D.5** — `docs/plan-v1.md` implementation plan
-- [ ] **D.6** — README "Running locally" filled in, design-phase banner removed *(→ Step 11.3)*
+- [~] **D.6** — README "Running locally" and status banner *(banner removed and commands for what exists today are already in `README.md`, kept in sync each phase; stays open because Step 11.3's actual bar — a reader gets a running service and a **successful payment** — needs Phases 2–11 first)*
 
 ### Phase 0 — Scaffolding (2/2)
 
