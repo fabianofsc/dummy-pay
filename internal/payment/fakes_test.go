@@ -21,14 +21,10 @@ func (m *fakeTxManager) Within(ctx context.Context, fn func(context.Context) err
 }
 
 type fakePaymentRepository struct {
-	inserted  []Payment
-	insertErr error
+	inserted []Payment
 }
 
 func (r *fakePaymentRepository) Insert(_ context.Context, p Payment) error {
-	if r.insertErr != nil {
-		return r.insertErr
-	}
 	r.inserted = append(r.inserted, p)
 	return nil
 }
@@ -58,8 +54,7 @@ type idempotencyKey struct {
 }
 
 type fakeIdempotencyStore struct {
-	records  map[idempotencyKey]IdempotencyRecord
-	claimErr error
+	records map[idempotencyKey]IdempotencyRecord
 }
 
 func newFakeIdempotencyStore() *fakeIdempotencyStore {
@@ -67,9 +62,6 @@ func newFakeIdempotencyStore() *fakeIdempotencyStore {
 }
 
 func (s *fakeIdempotencyStore) Claim(_ context.Context, accountID uuid.UUID, key string, fingerprint [32]byte, claimedAt time.Time) (bool, error) {
-	if s.claimErr != nil {
-		return false, s.claimErr
-	}
 	k := idempotencyKey{accountID, key}
 	if _, exists := s.records[k]; exists {
 		return false, nil
@@ -128,14 +120,10 @@ type outboxEntry struct {
 }
 
 type fakeOutboxWriter struct {
-	entries    []outboxEntry
-	enqueueErr error
+	entries []outboxEntry
 }
 
 func (w *fakeOutboxWriter) Enqueue(_ context.Context, kind OutboxKind, subjectID uuid.UUID, dueAt time.Time) error {
-	if w.enqueueErr != nil {
-		return w.enqueueErr
-	}
 	w.entries = append(w.entries, outboxEntry{Kind: kind, SubjectID: subjectID, DueAt: dueAt})
 	return nil
 }
@@ -155,13 +143,9 @@ func (w *fakeOutboxWriter) entriesOfKind(kind OutboxKind) []outboxEntry {
 type fakeSubscriptionRepository struct {
 	sub    Subscription
 	active bool
-	err    error
 }
 
 func (r *fakeSubscriptionRepository) LoadActive(_ context.Context, _ uuid.UUID) (Subscription, bool, error) {
-	if r.err != nil {
-		return Subscription{}, false, r.err
-	}
 	if !r.active {
 		return Subscription{}, false, nil
 	}
@@ -169,15 +153,11 @@ func (r *fakeSubscriptionRepository) LoadActive(_ context.Context, _ uuid.UUID) 
 }
 
 type fakeDeliveryRepository struct {
-	drafts    []DeliveryDraft
-	ids       []uuid.UUID
-	createErr error
+	drafts []DeliveryDraft
+	ids    []uuid.UUID
 }
 
 func (r *fakeDeliveryRepository) Create(_ context.Context, d DeliveryDraft) (uuid.UUID, error) {
-	if r.createErr != nil {
-		return uuid.Nil, r.createErr
-	}
 	id := uuid.New()
 	r.drafts = append(r.drafts, d)
 	r.ids = append(r.ids, id)
