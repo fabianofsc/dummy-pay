@@ -184,3 +184,13 @@ type DeliveryDraft struct {
 type DeliveryRepository interface {
 	Create(ctx context.Context, d DeliveryDraft) (deliveryID uuid.UUID, err error)
 }
+
+// Sender delivers signed webhook bytes to a URL (spec §5 "DELIVER_WEBHOOK",
+// spec §8). A non-2xx response is reported as httpStatus with err nil — it
+// is not a failure to deliver, only a failure the receiving side reported.
+// Only a transport failure (connection refused, timeout, DNS) is an err,
+// with httpStatus 0; the worker relies on this distinction to leave
+// last_http_status null exactly for transport failures (spec §5).
+type Sender interface {
+	Send(ctx context.Context, url string, body []byte, signature string) (httpStatus int, err error)
+}
