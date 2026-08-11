@@ -84,6 +84,22 @@ func TestPaymentRepository_Update_PersistsStatusTransitionAndUpdatedAt(t *testin
 	require.True(t, settledAt.Equal(got.UpdatedAt))
 }
 
+// TestPaymentRepository_Update_UnknownID_ReturnsErrPaymentNotFound proves
+// Update reports payment.ErrPaymentNotFound rather than silently succeeding
+// when the payment was never inserted (RowsAffected() == 0). p is built via
+// payment.NewPayment but never passed to Insert.
+func TestPaymentRepository_Update_UnknownID_ReturnsErrPaymentNotFound(t *testing.T) {
+	pool := NewTestDB(t)
+	ctx := context.Background()
+	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+
+	repo := NewPaymentRepository(pool)
+	p := newTestPayment(t, uuid.New(), payment.TokenCardApproved, now)
+
+	err := repo.Update(ctx, p)
+	require.ErrorIs(t, err, payment.ErrPaymentNotFound)
+}
+
 // TestPayments_CheckConstraints_RejectInvalidRows proves the CHECK
 // constraints on amount_cents and currency reject invalid rows even when
 // the domain layer is bypassed entirely — a raw SQL INSERT against the pool,
