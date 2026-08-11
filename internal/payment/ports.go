@@ -86,3 +86,70 @@ type IdempotencyStore interface {
 	// produced and the exact response to replay verbatim on retry.
 	Complete(ctx context.Context, accountID uuid.UUID, key string, paymentID uuid.UUID, responseStatus int, responseBody []byte, completedAt time.Time) error
 }
+
+var (
+	// ErrIdempotencyConflict is returned when a request arrives with an
+	// idempotency key whose first request is still in flight, within its
+	// lease (spec §4.1, 409 idempotency_conflict).
+	ErrIdempotencyConflict = errors.New("idempotency key is in flight")
+	// ErrIdempotencyKeyReuse is returned when a key is replayed with a body
+	// that fingerprints differently from the original (spec §4.1, 422
+	// idempotency_key_reuse).
+	ErrIdempotencyKeyReuse = errors.New("idempotency key reused with a different request body")
+)
+
+// TxManager runs fn within a single transaction; every port call fn makes
+// through the ctx it is given participates in that transaction (spec §8).
+type TxManager interface {
+	Within(ctx context.Context, fn func(ctx context.Context) error) error
+}
+
+// OutboxKind names one of the two kinds of scheduled work (spec §3
+// "outbox_work").
+type OutboxKind string
+
+const (
+	OutboxSettlePayment  OutboxKind = "SETTLE_PAYMENT"
+	OutboxDeliverWebhook OutboxKind = "DELIVER_WEBHOOK"
+)
+
+// OutboxWriter enqueues work due at a given time (spec §8).
+type OutboxWriter interface {
+	Enqueue(ctx context.Context, kind OutboxKind, subjectID uuid.UUID, dueAt time.Time) error
+}
+
+// Subscription is the active webhook subscription for an account, reduced to
+// what the create-payment flow needs to decide whether to emit an event. The
+// full subscription — URL, secret — is Phase 7's concern.
+type Subscription struct {
+	ID     uuid.UUID
+	Events []EventType
+}
+
+// SubscriptionRepository loads the active subscription for an account
+// (spec §8). ok is false when there is no active subscription.
+type SubscriptionRepository interface {
+	LoadActive(ctx context.Context, accountID uuid.UUID) (Subscription, bool, error)
+}
+
+// DeliveryDraft carries everything needed to create a webhook delivery row.
+// Payload bytes are computed by the concrete DeliveryRepository adapter, not
+// here — spec §6 keeps event construction and HMAC signing coupled in
+// internal/webhook so the bytes are never re-serialised between creation and
+// send. The domain only decides whether, and with what data, to create a
+// delivery.
+type DeliveryDraft struct {
+	EventID               uuid.UUID
+	EventType             EventType
+	SubscriptionID        uuid.UUID
+	PaymentID             uuid.UUID
+	ReferenceID           string
+	Status                Status
+	ProviderTransactionID uuid.UUID
+	CreatedAt             time.Time
+}
+
+// DeliveryRepository creates webhook delivery records (spec §8).
+type DeliveryRepository interface {
+	Create(ctx context.Context, d DeliveryDraft) (deliveryID uuid.UUID, err error)
+}
