@@ -12,7 +12,10 @@ import (
 )
 
 func TestHealth_ReturnsOKWithoutAuthentication(t *testing.T) {
-	router := httpapi.NewRouter()
+	router := httpapi.NewRouter(httpapi.AuthConfig{
+		AccountKeyID:     "test",
+		AccountKeySecret: "test",
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	rec := httptest.NewRecorder()
