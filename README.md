@@ -9,9 +9,10 @@ accepts card data.
 - **How it is built** — [docs/spec-v1.md](docs/spec-v1.md)
 - **In what order, and what's done so far** — [docs/plan-v1.md](docs/plan-v1.md#roadmap)
 
-> **Status: design phase.** Nothing is implemented yet. This README describes
-> the V1 contract we are building toward. The "Running locally" section is
-> filled in once the stack is settled.
+> **Status: early implementation.** This README describes the full V1 contract;
+> most of it is not built yet. What exists today: the Go module, the package
+> skeleton, and `GET /health`. See
+> [the roadmap](docs/plan-v1.md#roadmap) for exactly what's done.
 
 ---
 
@@ -279,23 +280,37 @@ defect; see [ADR-0008](docs/decisions/adr-0008-outbox-in-process-worker.md).
 Everything comes from the environment. There are no secrets in the repository
 and no config files holding credentials.
 
-| Variable                              | Purpose                                                      |
-| ------------------------------------- | ------------------------------------------------------------ |
-| `DUMMYPAY_HTTP_ADDR`                  | Listen address, e.g. `:8080`                                 |
-| `DUMMYPAY_DATABASE_URL`               | PostgreSQL DSN                                               |
-| `DUMMYPAY_ACCOUNT_KEY_ID`             | Basic auth username for the technical account                |
-| `DUMMYPAY_ACCOUNT_KEY_SECRET`         | Basic auth password for the technical account                |
-| `DUMMYPAY_WEBHOOK_SECRET_ENC_KEY`     | Key used to encrypt webhook secrets at rest — **separate from the database credentials** |
-| `DUMMYPAY_PROCESSING_DELAY`           | Settlement delay for `PROCESSING` scenarios, e.g. `3s`; `0s` in tests |
+| Variable                          | Required | Default | Purpose                                                      |
+| ---------------------------------- | -------- | ------- | ------------------------------------------------------------ |
+| `DUMMYPAY_HTTP_ADDR`                | no       | `:8080` | Listen address                                                |
+| `DUMMYPAY_DATABASE_URL`             | yes      | —       | PostgreSQL DSN                                                |
+| `DUMMYPAY_ACCOUNT_KEY_ID`           | yes      | —       | Basic auth username for the technical account                |
+| `DUMMYPAY_ACCOUNT_KEY_SECRET`       | yes      | —       | Basic auth password for the technical account                |
+| `DUMMYPAY_WEBHOOK_SECRET_ENC_KEY`   | yes      | —       | Key used to encrypt webhook secrets at rest — **separate from the database credentials**, base64, exactly 32 bytes decoded |
+| `DUMMYPAY_PROCESSING_DELAY`         | no       | `3s`    | Settlement delay for `PROCESSING` scenarios; `0s` in tests    |
+| `DUMMYPAY_IDEMPOTENCY_LEASE`        | no       | `30s`   | How long an in-flight idempotency key is held before it can be reclaimed |
+| `DUMMYPAY_WORKER_POLL_INTERVAL`     | no       | `250ms` | How often the outbox worker checks for due work               |
+| `DUMMYPAY_WEBHOOK_TIMEOUT`          | no       | `5s`    | Timeout for a single webhook delivery attempt                 |
 
-Exact variable names are settled alongside the stack.
+Full validation rules are in [spec-v1.md §9](docs/spec-v1.md#9-configuration).
+Copy [`.env.example`](.env.example) to `.env` and fill in real values — it is
+gitignored, so nothing there ever reaches a commit.
 
 ## Running locally
 
-Written once the service exists. The shape is settled: `docker compose up` for
-PostgreSQL, migrations applied by the binary on start, the environment variables
-above supplied from a local `.env.example`, and `go run ./cmd/dummypay` to
-serve. No external system is involved at any step.
+What works today:
+
+```sh
+cp .env.example .env      # then edit the values you care about
+docker compose up -d      # PostgreSQL
+go run ./cmd/dummypay      # serves on :8080
+curl http://localhost:8080/health
+# {"status":"ok"}
+```
+
+`/v1/payments` and `/v1/webhook-subscriptions` are not implemented yet — see
+the [roadmap](docs/plan-v1.md#roadmap). The service does not yet read
+`DUMMYPAY_DATABASE_URL` or apply migrations; `/health` is the only route.
 
 ## Testing
 
