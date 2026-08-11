@@ -13,6 +13,118 @@ a command whose output can be read.
 
 ---
 
+## Roadmap
+
+Progress tracker. A box is ticked only when that step's **Done when** condition
+has been observed — not when the code was written. Tick it in the same commit
+that satisfies it, so the list is never a summary written after the fact.
+
+`[ ]` not started · `[~]` in progress · `[x]` done
+
+### Documentation
+
+- [x] **D.1** — README with the full V1 contract
+- [x] **D.2** — `docs/pitch.md`
+- [x] **D.3** — 13 ADRs in `docs/decisions/` plus index
+- [x] **D.4** — `docs/spec-v1.md` design specification
+- [x] **D.5** — `docs/plan-v1.md` implementation plan
+- [ ] **D.6** — README "Running locally" filled in, design-phase banner removed *(→ Step 11.3)*
+
+### Phase 0 — Scaffolding
+
+- [ ] **0.1** — Repository skeleton: `go mod`, packages, Makefile, compose, `.env.example`
+- [ ] **0.2** — CI running build, vet, unit and integration tests
+
+### Phase 1 — Foundations
+
+- [ ] **1.1** — Configuration parsing and validation
+- [ ] **1.2** — Clock and UUIDv7 generator
+- [ ] **1.3** — Identifier prefix codec
+
+### Phase 2 — Domain
+
+- [ ] **2.1** — Value objects: amount, currency, scenario token
+- [ ] **2.2** — Payment state machine
+- [ ] **2.3** — Event selection
+
+### Phase 3 — Persistence
+
+- [ ] **3.1** — Migrations and integration test harness
+- [ ] **3.2** — Account seeding
+- [ ] **3.3** — Payment repository
+
+### Phase 4 — Idempotency
+
+- [ ] **4.1** — Request fingerprinting
+- [ ] **4.2** — Claim and complete
+- [ ] **4.3** — Concurrency: exactly one winner
+- [ ] **4.4** — Lease reclamation
+
+### Phase 5 — Create-payment use case
+
+- [ ] **5.1** — Happy paths against fakes
+- [ ] **5.2** — Idempotent paths: replay, reuse, conflict
+- [ ] **5.3** — Atomicity under a failing outbox write
+
+### Phase 6 — HTTP: create payment
+
+- [ ] **6.1** — Routing and authentication
+- [ ] **6.2** — Decoding, strict fields, validation mapping
+- [ ] **6.3** — Response shape
+
+### Phase 7 — Subscriptions
+
+- [ ] **7.1** — AES-256-GCM secret encryption
+- [ ] **7.2** — Create subscription endpoint
+
+### Phase 8 — Webhook payload and signing
+
+- [ ] **8.1** — Payload serialisation and HMAC
+- [ ] **8.2** — Sender against `httptest`
+
+### Phase 9 — Worker
+
+- [ ] **9.1** — Claiming with `SKIP LOCKED`
+- [ ] **9.2** — Settlement of `PROCESSING` payments
+- [ ] **9.3** — Delivery attempts and status recording
+
+### Phase 10 — Retry
+
+- [ ] **10.1** — Retry endpoint, byte-identical resend
+
+### Phase 11 — Assembly
+
+- [ ] **11.1** — Wiring and startup
+- [ ] **11.2** — Acceptance walkthrough
+- [ ] **11.3** — README updated for a real clone-and-run
+
+### Phase 12 — Fitness functions
+
+- [ ] **12.1** — Dependency direction test
+- [ ] **12.2** — Time discipline check
+- [ ] **12.3** — Suite wall-clock budget
+
+### Acceptance criteria
+
+Tracked separately from the phases, because these are what the project is
+judged on. Each is ticked when a test proves it end to end *(→ Step 11.2)*.
+
+- [ ] Service starts and the suite passes with no external network
+- [ ] `card_approved` → `APPROVED`
+- [ ] `card_declined` → `REJECTED`
+- [ ] `card_processing_approved` → `PROCESSING` then `APPROVED`
+- [ ] `card_processing_declined` → `PROCESSING` then `REJECTED`
+- [ ] Idempotent replay returns the original transaction
+- [ ] Same key with a different body creates nothing
+- [ ] Concurrent duplicate requests return 409
+- [ ] HMAC signature verifies over the raw body
+- [ ] Webhook failure is recorded as `FAILED` with attempt metadata
+- [ ] Retry resends and succeeds
+- [ ] API and local operation documented in the README
+- [ ] `go test ./...` run before delivery
+
+---
+
 ## Phase 0 — Scaffolding
 
 ### Step 0.1 — Repository skeleton
