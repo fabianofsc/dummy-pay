@@ -23,7 +23,7 @@ from the actual code, not just the step's prose below.
 
 `[ ]` not started · `[~]` in progress · `[x]` done
 
-**Documentation 5/6 (1 in progress) · Steps 26/36 · Acceptance criteria 0/13** —
+**Documentation 5/6 (1 in progress) · Steps 27/36 · Acceptance criteria 0/13** —
 updated 2026-08-11.
 
 ### Documentation (5/6)
@@ -87,10 +87,10 @@ updated 2026-08-11.
 - [x] **8.1** — Payload serialisation and HMAC — `internal/webhook/payload.go` *(fixture byte-for-byte match to README example; HMAC fixture computed independently via `openssl dgst -hmac`)*
 - [x] **8.2** — Sender against `httptest` — `internal/webhook/sender.go`, `internal/payment/ports.go` (`Sender` port)
 
-### Phase 9 — Worker (1/3) *(in progress)*
+### Phase 9 — Worker (2/3) *(in progress)*
 
 - [x] **9.1** — Claiming with `SKIP LOCKED` — `internal/postgres/outbox_claim.go` *(concurrent-claim test passes under `-race -count=20`)*
-- [ ] **9.2** — Settlement of `PROCESSING` payments
+- [x] **9.2** — Settlement of `PROCESSING` payments — `internal/payment/worker.go` (`OutboxClaimer`/`ClaimedWork` ports in `internal/payment/ports.go`)
 - [ ] **9.3** — Delivery attempts and status recording
 
 ### Phase 10 — Retry (0/1)
