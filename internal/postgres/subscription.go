@@ -97,3 +97,26 @@ func (r *SubscriptionRepository) LoadActive(ctx context.Context, accountID uuid.
 
 	return payment.Subscription{ID: id, Events: events}, true, nil
 }
+
+// LoadDeliveryTarget loads the URL and decrypted secret for the subscription
+// id, the data the worker's DELIVER_WEBHOOK handler needs to send and sign a
+// delivery (spec §5, ADR-0009). Decryption happens here, at the boundary
+// that already holds the encryption key — the domain never sees ciphertext
+// or the key, only the plaintext secret this returns.
+func (r *SubscriptionRepository) LoadDeliveryTarget(ctx context.Context, id uuid.UUID) (url, secret string, err error) {
+	var ciphertext, nonce []byte
+	err = querier(ctx, r.pool).QueryRow(ctx,
+		`SELECT url, secret_ciphertext, secret_nonce FROM webhook_subscriptions WHERE id = $1`,
+		id,
+	).Scan(&url, &ciphertext, &nonce)
+	if err != nil {
+		return "", "", err
+	}
+
+	plaintext, err := webhook.DecryptSecret(r.encKey, ciphertext, nonce)
+	if err != nil {
+		return "", "", err
+	}
+
+	return url, string(plaintext), nil
+}

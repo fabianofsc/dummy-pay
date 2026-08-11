@@ -16,6 +16,7 @@ type WorkerDeps struct {
 	Subscriptions SubscriptionRepository
 	Deliveries    DeliveryRepository
 	Outbox        OutboxWriter
+	Sender        Sender
 	IDs           IDGenerator
 	Clock         Clock
 }
@@ -53,7 +54,9 @@ func (w *Worker) ProcessBatch(ctx context.Context, batch int) error {
 				return fmt.Errorf("settle payment %s: %w", item.SubjectID, err)
 			}
 		case OutboxDeliverWebhook:
-			// Step 9.3.
+			if err := w.deliverWebhook(ctx, item.SubjectID, now); err != nil {
+				return fmt.Errorf("deliver webhook %s: %w", item.SubjectID, err)
+			}
 		default:
 			return fmt.Errorf("unknown outbox kind %q", item.Kind)
 		}
@@ -112,4 +115,36 @@ func (w *Worker) settlePayment(ctx context.Context, paymentID uuid.UUID, now tim
 
 		return nil
 	})
+}
+
+// deliverWebhook loads the delivery row (already created and persisted
+// before this handler ever runs — spec §3), sends its stored payload bytes
+// unchanged, and records exactly one attempt: SENT for a 2xx response,
+// FAILED with the response status for anything else, or FAILED with status
+// 0 (stored as null) for a transport failure that never got a response at
+// all (spec §5). A transport failure is not returned as an error — it is a
+// recorded outcome, not a reason to abort the batch.
+func (w *Worker) deliverWebhook(ctx context.Context, deliveryID uuid.UUID, now time.Time) error {
+	d, err := w.deps.Deliveries.FindByID(ctx, deliveryID)
+	if err != nil {
+		return fmt.Errorf("load delivery: %w", err)
+	}
+
+	url, secret, err := w.deps.Subscriptions.LoadDeliveryTarget(ctx, d.SubscriptionID)
+	if err != nil {
+		return fmt.Errorf("load delivery target: %w", err)
+	}
+
+	httpStatus, sendErr := w.deps.Sender.Send(ctx, url, d.Payload, secret)
+
+	status := DeliverySent
+	if sendErr != nil || httpStatus < 200 || httpStatus >= 300 {
+		status = DeliveryFailed
+	}
+
+	if err := w.deps.Deliveries.RecordAttempt(ctx, deliveryID, status, httpStatus, now); err != nil {
+		return fmt.Errorf("record delivery attempt: %w", err)
+	}
+
+	return nil
 }

@@ -21,7 +21,7 @@ import (
 func TestHTTPSender_Send_SignatureVerifiesOverRawBody(t *testing.T) {
 	const secret = "whsec_test_sender_secret"
 	body := []byte(`{"event_id":"evt_1","type":"payment.approved"}`)
-	signature := webhook.SignPayload(secret, body)
+	wantSig := webhook.SignPayload(secret, body)
 
 	var (
 		gotBody []byte
@@ -37,17 +37,17 @@ func TestHTTPSender_Send_SignatureVerifiesOverRawBody(t *testing.T) {
 	defer server.Close()
 
 	sender := webhook.NewHTTPSender(5 * time.Second)
-	status, err := sender.Send(context.Background(), server.URL, body, signature)
+	status, err := sender.Send(context.Background(), server.URL, body, secret)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, status)
 
 	require.Equal(t, body, gotBody)
-	require.Equal(t, signature, gotSig)
+	require.Equal(t, wantSig, gotSig)
 
 	// Consumer-side verification: recompute the HMAC over the raw bytes
 	// received and compare to the header, as the README instructs.
 	recomputed := webhook.SignPayload(secret, gotBody)
-	require.Equal(t, signature, recomputed)
+	require.Equal(t, wantSig, recomputed)
 }
 
 // TestHTTPSender_Send_NonTwoXX_ReturnsStatusWithNoError verifies a non-2xx

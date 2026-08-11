@@ -198,6 +198,12 @@ func (w *fakeOutboxWriter) entriesOfKind(kind OutboxKind) []outboxEntry {
 type fakeSubscriptionRepository struct {
 	sub    Subscription
 	active bool
+
+	// deliveryTargetURL/deliveryTargetSecret are what LoadDeliveryTarget
+	// returns, keyed only by call — tests using this fake exercise one
+	// subscription at a time.
+	deliveryTargetURL    string
+	deliveryTargetSecret string
 }
 
 func (r *fakeSubscriptionRepository) LoadActive(_ context.Context, _ uuid.UUID) (Subscription, bool, error) {
@@ -207,16 +213,73 @@ func (r *fakeSubscriptionRepository) LoadActive(_ context.Context, _ uuid.UUID) 
 	return r.sub, true, nil
 }
 
+func (r *fakeSubscriptionRepository) LoadDeliveryTarget(_ context.Context, _ uuid.UUID) (string, string, error) {
+	return r.deliveryTargetURL, r.deliveryTargetSecret, nil
+}
+
 type fakeDeliveryRepository struct {
 	drafts []DeliveryDraft
 	ids    []uuid.UUID
+
+	// byID backs FindByID/RecordAttempt so the worker's DELIVER_WEBHOOK
+	// handler can be tested the same way the real repository would behave:
+	// Create seeds the row, RecordAttempt mutates it in place.
+	byID map[uuid.UUID]*Delivery
+
+	// recordAttemptCalls counts RecordAttempt invocations, so a test can
+	// assert attempt tracking happened exactly once per Send.
+	recordAttemptCalls int
 }
 
 func (r *fakeDeliveryRepository) Create(_ context.Context, d DeliveryDraft) (uuid.UUID, error) {
 	id := uuid.New()
 	r.drafts = append(r.drafts, d)
 	r.ids = append(r.ids, id)
+	if r.byID == nil {
+		r.byID = map[uuid.UUID]*Delivery{}
+	}
+	r.byID[id] = &Delivery{
+		ID:             id,
+		SubscriptionID: d.SubscriptionID,
+		PaymentID:      d.PaymentID,
+		EventID:        d.EventID,
+		EventType:      d.EventType,
+		Payload:        []byte(`{"fake":"payload"}`),
+		Status:         DeliveryPending,
+		CreatedAt:      d.CreatedAt,
+	}
 	return id, nil
+}
+
+// seedDelivery installs a delivery row directly, for tests that exercise
+// DELIVER_WEBHOOK without going through Create first.
+func (r *fakeDeliveryRepository) seedDelivery(d Delivery) {
+	if r.byID == nil {
+		r.byID = map[uuid.UUID]*Delivery{}
+	}
+	cp := d
+	r.byID[d.ID] = &cp
+}
+
+func (r *fakeDeliveryRepository) FindByID(_ context.Context, id uuid.UUID) (Delivery, error) {
+	d, ok := r.byID[id]
+	if !ok {
+		return Delivery{}, errors.New("fake delivery repository: not found")
+	}
+	return *d, nil
+}
+
+func (r *fakeDeliveryRepository) RecordAttempt(_ context.Context, id uuid.UUID, status DeliveryStatus, httpStatus int, attemptedAt time.Time) error {
+	r.recordAttemptCalls++
+	d, ok := r.byID[id]
+	if !ok {
+		return errors.New("fake delivery repository: not found")
+	}
+	d.AttemptCount++
+	d.Status = status
+	d.LastAttemptedAt = attemptedAt
+	d.LastHTTPStatus = httpStatus
+	return nil
 }
 
 // fakeOutboxClaimer holds ClaimedWork items seeded directly by a test,
@@ -225,6 +288,29 @@ func (r *fakeDeliveryRepository) Create(_ context.Context, d DeliveryDraft) (uui
 // removes the item so a second ClaimDue call in the same test — modelling
 // "running the same work twice" — sees nothing left to claim, exactly as
 // outbox_work's claim-to-DONE transition does.
+// fakeSender stands in for the HTTP delivery adapter (proved for real,
+// against httptest.Server, in Step 8.2). result/err are what the next Send
+// call returns; onSend, if set, runs first — used to assert ordering, e.g.
+// that the delivery row already existed when Send was reached.
+type fakeSender struct {
+	result  int
+	err     error
+	calls   int
+	onSend  func()
+	gotURL  string
+	gotBody []byte
+}
+
+func (s *fakeSender) Send(_ context.Context, url string, body []byte, _ string) (int, error) {
+	s.calls++
+	s.gotURL = url
+	s.gotBody = body
+	if s.onSend != nil {
+		s.onSend()
+	}
+	return s.result, s.err
+}
+
 type fakeOutboxClaimer struct {
 	pending []ClaimedWork
 	calls   int

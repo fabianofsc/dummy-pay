@@ -161,6 +161,13 @@ type Subscription struct {
 // (spec §8). ok is false when there is no active subscription.
 type SubscriptionRepository interface {
 	LoadActive(ctx context.Context, accountID uuid.UUID) (Subscription, bool, error)
+
+	// LoadDeliveryTarget loads the URL and decrypted secret for id, the data
+	// the worker's DELIVER_WEBHOOK handler needs to send and sign a delivery.
+	// Decryption is an adapter concern (ADR-0009); this port only carries the
+	// plaintext through, the same way every other port carries data without
+	// leaking how the adapter produced it.
+	LoadDeliveryTarget(ctx context.Context, id uuid.UUID) (url, secret string, err error)
 }
 
 // DeliveryDraft carries everything needed to create a webhook delivery row.
@@ -180,9 +187,51 @@ type DeliveryDraft struct {
 	CreatedAt             time.Time
 }
 
-// DeliveryRepository creates webhook delivery records (spec §8).
+// DeliveryStatus is a webhook delivery's position in its lifecycle
+// (spec §3 "webhook_deliveries").
+type DeliveryStatus string
+
+const (
+	DeliveryPending DeliveryStatus = "PENDING"
+	DeliverySent    DeliveryStatus = "SENT"
+	DeliveryFailed  DeliveryStatus = "FAILED"
+)
+
+// Delivery is the persisted state of one webhook delivery attempt record
+// (spec §3 "webhook_deliveries"). Payload is the exact bytes stored at
+// creation and sent unchanged on every attempt, including retries — nothing
+// downstream re-serialises (spec §3, spec §6). LastHTTPStatus is 0 when no
+// attempt has recorded one yet, or when the last attempt was a transport
+// failure that never got a response (spec §5).
+type Delivery struct {
+	ID              uuid.UUID
+	SubscriptionID  uuid.UUID
+	PaymentID       uuid.UUID
+	EventID         uuid.UUID
+	EventType       EventType
+	Payload         []byte
+	Status          DeliveryStatus
+	AttemptCount    int
+	LastAttemptedAt time.Time
+	LastHTTPStatus  int
+	CreatedAt       time.Time
+}
+
+// ErrDeliveryNotFound is returned when no delivery exists for a given id.
+var ErrDeliveryNotFound = errors.New("delivery not found")
+
+// DeliveryRepository creates and updates webhook delivery records (spec §8).
 type DeliveryRepository interface {
 	Create(ctx context.Context, d DeliveryDraft) (deliveryID uuid.UUID, err error)
+
+	// FindByID loads a delivery by id.
+	FindByID(ctx context.Context, id uuid.UUID) (Delivery, error)
+
+	// RecordAttempt increments attempt_count and sets status,
+	// last_attempted_at, and last_http_status in one write — every attempt,
+	// successful or not, records all three (spec §5). httpStatus is 0 for a
+	// transport failure, stored as null rather than a fabricated status code.
+	RecordAttempt(ctx context.Context, id uuid.UUID, status DeliveryStatus, httpStatus int, attemptedAt time.Time) error
 }
 
 // ClaimedWork is one row claimed from outbox_work: enough for the worker to
@@ -201,12 +250,16 @@ type OutboxClaimer interface {
 	ClaimDue(ctx context.Context, now time.Time, batch int) ([]ClaimedWork, error)
 }
 
-// Sender delivers signed webhook bytes to a URL (spec §5 "DELIVER_WEBHOOK",
-// spec §8). A non-2xx response is reported as httpStatus with err nil — it
-// is not a failure to deliver, only a failure the receiving side reported.
-// Only a transport failure (connection refused, timeout, DNS) is an err,
-// with httpStatus 0; the worker relies on this distinction to leave
+// Sender delivers webhook bytes to a URL, signing them along the way
+// (spec §5 "DELIVER_WEBHOOK", spec §6, spec §8). Signing takes secret rather
+// than a pre-computed signature so HMAC computation stays an adapter concern
+// (internal/webhook) that the domain never touches directly (ADR-0003).
+//
+// A non-2xx response is reported as httpStatus with err nil — it is not a
+// failure to deliver, only a failure the receiving side reported. Only a
+// transport failure (connection refused, timeout, DNS) is an err, with
+// httpStatus 0; the worker relies on this distinction to leave
 // last_http_status null exactly for transport failures (spec §5).
 type Sender interface {
-	Send(ctx context.Context, url string, body []byte, signature string) (httpStatus int, err error)
+	Send(ctx context.Context, url string, body []byte, secret string) (httpStatus int, err error)
 }

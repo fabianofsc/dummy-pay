@@ -68,6 +68,10 @@ func (noSubscriptionRepository) LoadActive(context.Context, uuid.UUID) (payment.
 	return payment.Subscription{}, false, nil
 }
 
+func (noSubscriptionRepository) LoadDeliveryTarget(context.Context, uuid.UUID) (string, string, error) {
+	return "", "", errors.New("no active subscription: LoadDeliveryTarget must not be called")
+}
+
 // unusedDeliveryRepository fails the test if the flow ever reaches delivery
 // creation, which it must not with no active subscription.
 type unusedDeliveryRepository struct{ t *testing.T }
@@ -76,6 +80,18 @@ func (r unusedDeliveryRepository) Create(context.Context, payment.DeliveryDraft)
 	r.t.Helper()
 	r.t.Errorf("DeliveryRepository.Create was called although there is no active subscription")
 	return uuid.Nil, errors.New("delivery repository must not be called")
+}
+
+func (r unusedDeliveryRepository) FindByID(context.Context, uuid.UUID) (payment.Delivery, error) {
+	r.t.Helper()
+	r.t.Errorf("DeliveryRepository.FindByID was called although there is no active subscription")
+	return payment.Delivery{}, errors.New("delivery repository must not be called")
+}
+
+func (r unusedDeliveryRepository) RecordAttempt(context.Context, uuid.UUID, payment.DeliveryStatus, int, time.Time) error {
+	r.t.Helper()
+	r.t.Errorf("DeliveryRepository.RecordAttempt was called although there is no active subscription")
+	return errors.New("delivery repository must not be called")
 }
 
 // recordingIDGenerator hands out real UUIDv7 values and remembers them, so
