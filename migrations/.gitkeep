@@ -1,2 +1,0 @@
-Goose SQL migrations land here, embedded via embed.FS (ADR-0011).
-The first migration is created in plan step 3.1.
