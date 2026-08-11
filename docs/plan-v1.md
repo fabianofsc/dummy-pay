@@ -23,8 +23,8 @@ from the actual code, not just the step's prose below.
 
 `[ ]` not started · `[~]` in progress · `[x]` done
 
-**Documentation 5/6 (1 in progress) · Steps 8/36 · Acceptance criteria 0/13** —
-updated 2026-08-10.
+**Documentation 5/6 (1 in progress) · Steps 14/36 · Acceptance criteria 0/13** —
+updated 2026-08-11.
 
 ### Documentation (5/6)
 
@@ -65,17 +65,17 @@ updated 2026-08-10.
 - [ ] **4.3** — Concurrency: exactly one winner
 - [ ] **4.4** — Lease reclamation
 
-### Phase 5 — Create-payment use case (0/3)
+### Phase 5 — Create-payment use case (3/3)
 
-- [ ] **5.1** — Happy paths against fakes
-- [ ] **5.2** — Idempotent paths: replay, reuse, conflict
-- [ ] **5.3** — Atomicity under a failing outbox write
+- [x] **5.1** — Happy paths against fakes — `internal/payment/create_payment.go`
+- [x] **5.2** — Idempotent paths: replay, reuse, conflict — `internal/postgres/idempotency.go`
+- [x] **5.3** — Atomicity under a failing outbox write — `internal/postgres/tx.go`, `internal/postgres/outbox.go`
 
-### Phase 6 — HTTP: create payment (0/3)
+### Phase 6 — HTTP: create payment (3/3)
 
-- [ ] **6.1** — Routing and authentication
-- [ ] **6.2** — Decoding, strict fields, validation mapping
-- [ ] **6.3** — Response shape
+- [x] **6.1** — Routing and authentication — `internal/http/router.go`, `internal/http/router_auth_test.go`
+- [x] **6.2** — Decoding, strict fields, validation mapping — `internal/http/handler_create_payment.go`, `internal/http/handler_create_payment_test.go`
+- [x] **6.3** — Response shape — `internal/http/types.go`, `internal/http/handler_create_payment_response_test.go`
 
 ### Phase 7 — Subscriptions (0/2)
 
