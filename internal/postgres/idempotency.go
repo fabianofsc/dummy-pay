@@ -143,3 +143,48 @@ func (s *IdempotencyStore) Complete(ctx context.Context, accountID uuid.UUID, ke
 	}
 	return nil
 }
+
+// Reclaim takes over an abandoned IN_FLIGHT record: a conditional UPDATE that
+// matches only while state is still IN_FLIGHT and claimed_at is strictly
+// before cutoff (spec §4.1, "Reclaiming an expired lease is a conditional
+// update"). Two requests racing to reclaim the same key therefore resolve the
+// way the original claim did — concurrent UPDATEs against one row serialise,
+// the loser re-evaluates its WHERE clause against the row the winner just
+// wrote, and since the new claimed_at is later than cutoff it no longer
+// matches. One winner, decided by the database (ADR-0007).
+//
+// The comparison is strict: a row claimed at exactly cutoff is inside its
+// lease, not past it. Losing is reported as ok=false with a nil error, exactly
+// as in Claim above.
+//
+// Complete deliberately carries no ownership token, and the obvious race — a
+// slow original owner completing a key someone else has already reclaimed,
+// overwriting the reclaimer's payment and response with stale data — cannot
+// occur here by construction. Spec §4.1 puts Claim, the work, and Complete in
+// one transaction. Under READ COMMITTED a row inserted by an open, uncommitted
+// transaction is invisible to every other transaction, so while that
+// transaction runs no other process can see the IN_FLIGHT row at all, let
+// alone reclaim it. A row only becomes reclaimable if the transaction that
+// claimed it committed the claim and never completed it, which happens only
+// when the owning process died — and a dead process never calls Complete. A
+// live process completing outside the transaction that claimed would itself
+// violate spec §4.1; that is the atomicity guarantee's job to enforce, not
+// something to patch around with a token here.
+func (s *IdempotencyStore) Reclaim(ctx context.Context, accountID uuid.UUID, key string, cutoff, now time.Time) (bool, error) {
+	var reclaimedBy uuid.UUID
+	err := querier(ctx, s.pool).QueryRow(ctx,
+		`UPDATE idempotency_keys
+		 SET claimed_at = $3
+		 WHERE account_id = $1 AND idempotency_key = $2
+		   AND state = 'IN_FLIGHT' AND claimed_at < $4
+		 RETURNING account_id`,
+		accountID, key, now, cutoff,
+	).Scan(&reclaimedBy)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}

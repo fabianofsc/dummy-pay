@@ -74,6 +74,14 @@ type IdempotencyStore interface {
 	// ErrIdempotencyRecordNotFound if none exists.
 	Load(ctx context.Context, accountID uuid.UUID, key string) (IdempotencyRecord, error)
 
+	// Reclaim takes over an IN_FLIGHT record whose claimedAt is strictly
+	// before cutoff (i.e. its lease has expired), resetting claimedAt to
+	// now. ok is false when reclaim loses the race: the record is
+	// COMPLETED, already reclaimed by someone else after cutoff, or still
+	// within its lease (claimedAt >= cutoff). Like Claim, "lost the race"
+	// is signalled by ok=false, never by a non-nil err.
+	Reclaim(ctx context.Context, accountID uuid.UUID, key string, cutoff, now time.Time) (ok bool, err error)
+
 	// Complete marks an IN_FLIGHT record COMPLETED, attaching the payment it
 	// produced and the exact response to replay verbatim on retry.
 	Complete(ctx context.Context, accountID uuid.UUID, key string, paymentID uuid.UUID, responseStatus int, responseBody []byte, completedAt time.Time) error
