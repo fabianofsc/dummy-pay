@@ -23,7 +23,7 @@ from the actual code, not just the step's prose below.
 
 `[ ]` not started · `[~]` in progress · `[x]` done
 
-**Documentation 5/6 (1 in progress) · Steps 28/36 · Acceptance criteria 0/13** —
+**Documentation 5/6 (1 in progress) · Steps 29/36 · Acceptance criteria 0/13** —
 updated 2026-08-11.
 
 ### Documentation (5/6)
@@ -93,9 +93,9 @@ updated 2026-08-11.
 - [x] **9.2** — Settlement of `PROCESSING` payments — `internal/payment/worker.go` (`OutboxClaimer`/`ClaimedWork` ports in `internal/payment/ports.go`)
 - [x] **9.3** — Delivery attempts and status recording — `internal/payment/worker.go` (`deliverWebhook`), `internal/postgres/delivery.go` *(first concrete `DeliveryRepository`; `last_http_status` proved stored as real SQL NULL on transport failure)*
 
-### Phase 10 — Retry (0/1)
+### Phase 10 — Retry (1/1)
 
-- [ ] **10.1** — Retry endpoint, byte-identical resend
+- [x] **10.1** — Retry endpoint, byte-identical resend — `internal/payment/retry_delivery.go`, `internal/http/handler_retry_delivery.go` *(retry-then-worker test proves byte-identical resend with incremented attempt_count; account scoping proved against the real join)*
 
 ### Phase 11 — Assembly (0/3)
 
