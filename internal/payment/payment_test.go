@@ -1,0 +1,106 @@
+package payment
+
+import (
+	"testing"
+	"time"
+
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+)
+
+func newTestPayment(t *testing.T, token ScenarioToken, now time.Time) Payment {
+	t.Helper()
+	amount, err := NewAmount(10990)
+	require.NoError(t, err)
+
+	return NewPayment(uuid.New(), uuid.New(), uuid.New(), "checkout:123", amount, CurrencyBRL, token, now)
+}
+
+func TestNewPayment_CreationStatus(t *testing.T) {
+	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		token      ScenarioToken
+		wantStatus Status
+	}{
+		{TokenCardApproved, StatusApproved},
+		{TokenCardDeclined, StatusRejected},
+		{TokenCardProcessingApproved, StatusProcessing},
+		{TokenCardProcessingDeclined, StatusProcessing},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.token), func(t *testing.T) {
+			p := newTestPayment(t, tt.token, now)
+
+			require.Equal(t, tt.wantStatus, p.Status)
+			require.True(t, now.Equal(p.CreatedAt))
+			require.True(t, now.Equal(p.UpdatedAt))
+		})
+	}
+}
+
+func TestPayment_Settle_ProcessingApproved_BecomesApproved(t *testing.T) {
+	createdAt := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+	settledAt := createdAt.Add(3 * time.Second)
+	p := newTestPayment(t, TokenCardProcessingApproved, createdAt)
+
+	p.Settle(settledAt)
+
+	require.Equal(t, StatusApproved, p.Status)
+	require.True(t, settledAt.Equal(p.UpdatedAt))
+}
+
+func TestPayment_Settle_ProcessingDeclined_BecomesRejected(t *testing.T) {
+	createdAt := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+	settledAt := createdAt.Add(3 * time.Second)
+	p := newTestPayment(t, TokenCardProcessingDeclined, createdAt)
+
+	p.Settle(settledAt)
+
+	require.Equal(t, StatusRejected, p.Status)
+	require.True(t, settledAt.Equal(p.UpdatedAt))
+}
+
+// Settling a payment that is already terminal — whether it started terminal
+// (card_approved/card_declined) or was already settled once — is a no-op,
+// not an error. This is the refused transition out of a terminal status
+// (spec §2): nothing in the payment changes, including UpdatedAt.
+func TestPayment_Settle_AlreadyTerminal_IsNoOp(t *testing.T) {
+	createdAt := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+	laterAt := createdAt.Add(3 * time.Second)
+
+	tests := []struct {
+		name  string
+		token ScenarioToken
+	}{
+		{"created approved", TokenCardApproved},
+		{"created declined", TokenCardDeclined},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			before := newTestPayment(t, tt.token, createdAt)
+			after := before
+
+			after.Settle(laterAt)
+
+			if diff := cmp.Diff(before, after); diff != "" {
+				t.Errorf("Settle on a terminal payment changed it (-before +after):\n%s", diff)
+			}
+		})
+	}
+
+	t.Run("already settled once", func(t *testing.T) {
+		p := newTestPayment(t, TokenCardProcessingApproved, createdAt)
+		p.Settle(laterAt)
+		settledOnce := p
+
+		p.Settle(laterAt.Add(3 * time.Second))
+
+		if diff := cmp.Diff(settledOnce, p); diff != "" {
+			t.Errorf("second Settle changed an already-settled payment (-before +after):\n%s", diff)
+		}
+	})
+}

@@ -23,8 +23,8 @@ from the actual code, not just the step's prose below.
 
 `[ ]` not started · `[~]` in progress · `[x]` done
 
-**Documentation 5/6 (1 in progress) · Steps 5/36 · Acceptance criteria 0/13** —
-updated 2026-08-11.
+**Documentation 5/6 (1 in progress) · Steps 8/36 · Acceptance criteria 0/13** —
+updated 2026-08-10.
 
 ### Documentation (5/6)
 
@@ -46,11 +46,11 @@ updated 2026-08-11.
 - [x] **1.2** — Clock and UUIDv7 generator — `internal/payment/ports.go` (ports), `internal/clock/clock.go`, `internal/clock/id.go`
 - [x] **1.3** — Identifier prefix codec — `internal/http/idcodec.go`
 
-### Phase 2 — Domain (0/3)
+### Phase 2 — Domain (3/3)
 
-- [ ] **2.1** — Value objects: amount, currency, scenario token
-- [ ] **2.2** — Payment state machine
-- [ ] **2.3** — Event selection
+- [x] **2.1** — Value objects: amount, currency, scenario token — `internal/payment/valueobjects.go`
+- [x] **2.2** — Payment state machine — `internal/payment/payment.go`
+- [x] **2.3** — Event selection — `internal/payment/events.go`
 
 ### Phase 3 — Persistence (0/3)
 

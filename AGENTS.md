@@ -143,14 +143,18 @@ the task is wrong than that the scope is.
 
 ## Current state
 
-Documentation complete. **Phase 0 (Scaffolding) and Phase 1 (Foundations) are
-done** — see [the roadmap](docs/plan-v1.md#roadmap) for the authoritative,
-per-step status. In place: the Go module and package layout, `Makefile`,
-`docker-compose.yml`, `.env.example`, CI (`.github/workflows/ci.yml`, verified
-locally — not yet exercised by GitHub Actions since no remote is configured),
-`GET /health`, environment configuration (`internal/config`), the injected
-`Clock` and UUIDv7 `IDGenerator` ports and their implementations
-(`internal/payment/ports.go`, `internal/clock`), and the identifier prefix
-codec (`internal/http/idcodec.go`). 67 tests pass clean under `-race
--count=5`. Nothing talks to PostgreSQL yet, and the domain model (`Payment`,
-the state machine) doesn't exist. Next: Phase 2 — Domain, step 2.1.
+Documentation complete. **Phase 0 (Scaffolding), Phase 1 (Foundations), and
+Phase 2 (Domain) are done** — see [the roadmap](docs/plan-v1.md#roadmap) for
+the authoritative, per-step status. In place: the Go module and package
+layout, `Makefile`, `docker-compose.yml`, `.env.example`, CI
+(`.github/workflows/ci.yml`, verified locally — not yet exercised by GitHub
+Actions since no remote is configured), `GET /health`, environment
+configuration (`internal/config`), the injected `Clock` and UUIDv7
+`IDGenerator` ports and their implementations (`internal/payment/ports.go`,
+`internal/clock`), the identifier prefix codec (`internal/http/idcodec.go`),
+and the domain model — `Amount`/`Currency`/`ScenarioToken` value objects, the
+`Payment` state machine, and event selection (`internal/payment/valueobjects.go`,
+`internal/payment/payment.go`, `internal/payment/events.go`). 97 tests pass
+clean under `-race -count=5`. Nothing talks to PostgreSQL yet — no repository,
+no migrations, no use case wiring the domain to HTTP. Next: Phase 3 —
+Persistence, step 3.1.
