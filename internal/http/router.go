@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 
 	"dummypay/internal/payment"
 )
@@ -21,8 +22,8 @@ type AuthConfig struct {
 	AccountKeySecret string
 }
 
-// NewRouterWithUseCase builds a router with an injected use case for testing.
-// Production uses NewRouter.
+// NewRouterWithUseCase builds a router with an injected create-payment use
+// case for testing. Production uses NewProductionRouter.
 func NewRouterWithUseCase(auth AuthConfig, uc *payment.CreatePaymentUseCase, accountRepo interface { /* payment repository or compatible */
 }) *chi.Mux {
 	r := chi.NewRouter()
@@ -32,7 +33,7 @@ func NewRouterWithUseCase(auth AuthConfig, uc *payment.CreatePaymentUseCase, acc
 	r.Route("/v1", func(v1 chi.Router) {
 		v1.Use(basicAuthMiddleware(auth))
 
-		v1.Post("/payments", makeHandleCreatePayment(uc, auth))
+		v1.Post("/payments", makeHandleCreatePayment(uc, uuid.Nil))
 		v1.Post("/webhook-subscriptions", handleCreateSubscription)
 		v1.Post("/webhook-deliveries/{delivery_id}/retry", handleRetryDelivery)
 	})
@@ -40,9 +41,10 @@ func NewRouterWithUseCase(auth AuthConfig, uc *payment.CreatePaymentUseCase, acc
 	return r
 }
 
-// NewRouter builds the top-level router. /health is unauthenticated and
-// exists for local and orchestrator liveness checks; every route under /v1
-// requires the technical account's credentials (spec §6.1, ADR-0005).
+// NewRouter builds the top-level router with boundary validation active but
+// no use case wired — every request that passes validation gets 501. Used by
+// handler-level tests that only exercise decoding, validation, and
+// authentication. Production uses NewProductionRouter.
 func NewRouter(auth AuthConfig) *chi.Mux {
 	r := chi.NewRouter()
 
@@ -55,6 +57,37 @@ func NewRouter(auth AuthConfig) *chi.Mux {
 		v1.Post("/payments", handleCreatePayment)
 		v1.Post("/webhook-subscriptions", handleCreateSubscription)
 		v1.Post("/webhook-deliveries/{delivery_id}/retry", handleRetryDelivery)
+	})
+
+	return r
+}
+
+// ProductionRouterDeps bundles every dependency the fully wired production
+// router needs (Phase 11 assembly). V1 has exactly one technical account
+// (spec §1 "Technical account"), so AccountID is a single value threaded
+// into every handler rather than derived per-request.
+type ProductionRouterDeps struct {
+	Auth               AuthConfig
+	AccountID          uuid.UUID
+	CreatePayment      *payment.CreatePaymentUseCase
+	CreateSubscription *payment.CreateSubscriptionUseCase
+	RetryDelivery      *payment.RetryDeliveryUseCase
+}
+
+// NewProductionRouter builds the router cmd/dummypay actually serves: every
+// /v1 handler backed by its real use case, all sharing the one technical
+// account (spec §6.1, ADR-0005).
+func NewProductionRouter(deps ProductionRouterDeps) *chi.Mux {
+	r := chi.NewRouter()
+
+	r.Get("/health", handleHealth)
+
+	r.Route("/v1", func(v1 chi.Router) {
+		v1.Use(basicAuthMiddleware(deps.Auth))
+
+		v1.Post("/payments", makeHandleCreatePayment(deps.CreatePayment, deps.AccountID))
+		v1.Post("/webhook-subscriptions", makeHandleCreateSubscription(deps.CreateSubscription, deps.AccountID))
+		v1.Post("/webhook-deliveries/{delivery_id}/retry", makeHandleRetryDeliveryForAccount(deps.RetryDelivery, deps.AccountID))
 	})
 
 	return r

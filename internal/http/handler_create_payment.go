@@ -10,9 +10,10 @@ import (
 	"dummypay/internal/payment"
 )
 
-// makeHandleCreatePayment returns a handler that uses the given use case.
-// Used for testing with injected fakes.
-func makeHandleCreatePayment(uc *payment.CreatePaymentUseCase, auth AuthConfig) http.HandlerFunc {
+// makeHandleCreatePayment returns a handler that uses the given use case and
+// account id. Used for testing with injected fakes, and by the production
+// router (Phase 11).
+func makeHandleCreatePayment(uc *payment.CreatePaymentUseCase, accountID uuid.UUID) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
@@ -56,10 +57,6 @@ func makeHandleCreatePayment(uc *payment.CreatePaymentUseCase, auth AuthConfig) 
 		currency, _ := payment.NewCurrency(req.Currency)
 		token, _ := payment.NewScenarioToken(req.PaymentToken)
 
-		// Placeholder account ID — would come from auth context in production.
-		// For now, use nil UUID. Will be replaced in real implementation.
-		accountID := uuid.Nil
-
 		ucReq := payment.CreatePaymentRequest{
 			AccountID:      accountID,
 			IdempotencyKey: idempotencyKey,
@@ -70,8 +67,11 @@ func makeHandleCreatePayment(uc *payment.CreatePaymentUseCase, auth AuthConfig) 
 		}
 
 		// Execute use case.
-		p, err := uc.Execute(r.Context(), ucReq, func(p payment.Payment) (int, []byte) {
-			// Response encoder: returns status and serialized body.
+		result, err := uc.Execute(r.Context(), ucReq, func(p payment.Payment) (int, []byte) {
+			// Response encoder: returns status and serialized body. Called
+			// once, inside the use case's transaction, and the exact bytes
+			// returned here are what a replay gets back verbatim — never
+			// re-encoded (spec §4.1, spec §6.3).
 			resp := CreatePaymentResponse{
 				PaymentID:             encodeUUID(p.ID, "pay"),
 				ProviderTransactionID: encodeUUID(p.ProviderTransactionID, "txn"),
@@ -89,8 +89,11 @@ func makeHandleCreatePayment(uc *payment.CreatePaymentUseCase, auth AuthConfig) 
 			return
 		}
 
-		// Write response.
-		_ = json.NewEncoder(w).Encode(p)
+		// Write exactly the bytes the encoder produced — a fresh creation and
+		// a replay both go through this same path, so both return
+		// byte-identical bodies for the same idempotency key (spec §6.3).
+		w.WriteHeader(result.ResponseStatus)
+		_, _ = w.Write(result.ResponseBody)
 	}
 }
 

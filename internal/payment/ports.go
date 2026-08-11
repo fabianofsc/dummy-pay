@@ -170,6 +170,27 @@ type SubscriptionRepository interface {
 	LoadDeliveryTarget(ctx context.Context, id uuid.UUID) (url, secret string, err error)
 }
 
+// ErrSubscriptionExists is returned when an account already has an active
+// subscription. The database's partial unique index is what actually
+// enforces this (spec §3, ADR-0009); this sentinel just names it at the
+// domain level, so CreateSubscriptionUseCase can branch on it without
+// importing the adapter that produces it (ADR-0003).
+var ErrSubscriptionExists = errors.New("account already has an active subscription")
+
+// SecretGenerator produces a new webhook subscription secret (spec §4.2).
+// Generation uses crypto/rand, an adapter concern kept out of the domain the
+// same way IDGenerator and Clock are.
+type SecretGenerator interface {
+	NewSecret() (string, error)
+}
+
+// SubscriptionCreator persists a new webhook subscription (spec §4.2,
+// spec §8). Kept separate from SubscriptionRepository, which only reads —
+// writing is a narrower concern used by exactly one flow.
+type SubscriptionCreator interface {
+	Create(ctx context.Context, id, accountID uuid.UUID, url string, events []EventType, secretPlaintext string, createdAt time.Time) error
+}
+
 // DeliveryDraft carries everything needed to create a webhook delivery row.
 // Payload bytes are computed by the concrete DeliveryRepository adapter, not
 // here — spec §6 keeps event construction and HMAC signing coupled in

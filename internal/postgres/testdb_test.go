@@ -12,9 +12,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
-
-	"dummypay/migrations"
 )
 
 // dsnEnvVar is the same variable internal/config reads (spec §9).
@@ -94,12 +91,7 @@ func NewTestDB(t *testing.T) *pgxpool.Pool {
 	connConfig.RuntimeParams["search_path"] = schema
 
 	sqlDB := stdlib.OpenDB(*connConfig)
-	provider, err := goose.NewProvider(goose.DialectPostgres, sqlDB, migrations.FS)
-	if err != nil {
-		sqlDB.Close()
-		t.Fatalf("create goose provider: %v", err)
-	}
-	if _, err := provider.Up(ctx); err != nil {
+	if err := Migrate(ctx, sqlDB); err != nil {
 		sqlDB.Close()
 		t.Fatalf("apply migrations to schema %s: %v", schema, err)
 	}

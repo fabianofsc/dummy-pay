@@ -11,9 +11,10 @@ import (
 	"dummypay/internal/payment"
 )
 
-// makeHandleRetryDelivery returns a handler that uses the given use case.
-// Used for testing with injected fakes.
-func makeHandleRetryDelivery(uc *payment.RetryDeliveryUseCase) http.HandlerFunc {
+// makeHandleRetryDeliveryForAccount returns a handler that uses the given
+// use case and account id. Used for testing with injected fakes, and by the
+// production router (Phase 11).
+func makeHandleRetryDeliveryForAccount(uc *payment.RetryDeliveryUseCase, accountID uuid.UUID) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
@@ -21,10 +22,6 @@ func makeHandleRetryDelivery(uc *payment.RetryDeliveryUseCase) http.HandlerFunc 
 		if !ok {
 			return
 		}
-
-		// Placeholder account ID — would come from auth context in
-		// production, the same gap create-payment's handler has (Phase 11).
-		accountID := uuid.Nil
 
 		d, err := uc.Execute(r.Context(), accountID, deliveryID)
 		switch {

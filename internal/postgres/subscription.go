@@ -20,11 +20,12 @@ import (
 // subscription (spec §3, ADR-0009).
 const uniqueViolationCode = "23505"
 
-// ErrSubscriptionExists is returned by Create when the account already has
-// an active subscription. The database's partial unique index is what
-// actually enforces this — this error just names the pgconn.PgError it
-// produces (spec §4.2, 409 subscription_exists).
-var ErrSubscriptionExists = errors.New("account already has an active subscription")
+// ErrSubscriptionExists aliases payment.ErrSubscriptionExists: Create
+// returns the domain sentinel directly, so callers branch on it without this
+// package needing its own copy. Kept as a name here too, unchanged, so
+// existing call sites and tests referencing postgres.ErrSubscriptionExists
+// need no update.
+var ErrSubscriptionExists = payment.ErrSubscriptionExists
 
 // SubscriptionRepository is the Postgres adapter for
 // payment.SubscriptionRepository, plus subscription creation (spec §3

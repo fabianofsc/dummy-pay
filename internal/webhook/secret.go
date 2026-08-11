@@ -22,6 +22,16 @@ func GenerateSecret() (string, error) {
 	return "whsec_" + base64.RawURLEncoding.EncodeToString(raw), nil
 }
 
+// SecretGenerator is the adapter for payment.SecretGenerator: a thin type
+// wrapping GenerateSecret so cmd/dummypay has a concrete value to hand the
+// domain, without the domain importing this package (ADR-0003).
+type SecretGenerator struct{}
+
+// NewSecret generates a new webhook subscription secret.
+func (SecretGenerator) NewSecret() (string, error) {
+	return GenerateSecret()
+}
+
 // keyLength is the required key size for AES-256. aes.NewCipher also accepts
 // 16 and 24 bytes (AES-128/192), so this is checked explicitly rather than
 // relying on the library to enforce the 256-bit requirement ADR-0009 commits to.

@@ -71,3 +71,28 @@ func ClaimDueWork(ctx context.Context, pool *pgxpool.Pool, now time.Time, batch 
 
 	return claimed, nil
 }
+
+// OutboxClaimer is the Postgres adapter for payment.OutboxClaimer, wrapping
+// ClaimDueWork — the free function Step 9.1's tests exercise directly — so
+// the worker can depend on the domain port rather than this package.
+type OutboxClaimer struct {
+	pool *pgxpool.Pool
+}
+
+// NewOutboxClaimer constructs an OutboxClaimer against pool.
+func NewOutboxClaimer(pool *pgxpool.Pool) *OutboxClaimer {
+	return &OutboxClaimer{pool: pool}
+}
+
+// ClaimDue implements payment.OutboxClaimer.
+func (c *OutboxClaimer) ClaimDue(ctx context.Context, now time.Time, batch int) ([]payment.ClaimedWork, error) {
+	rows, err := ClaimDueWork(ctx, c.pool, now, batch)
+	if err != nil {
+		return nil, err
+	}
+	claimed := make([]payment.ClaimedWork, len(rows))
+	for i, r := range rows {
+		claimed[i] = payment.ClaimedWork{ID: r.ID, Kind: r.Kind, SubjectID: r.SubjectID}
+	}
+	return claimed, nil
+}
