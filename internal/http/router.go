@@ -23,7 +23,8 @@ type AuthConfig struct {
 
 // NewRouterWithUseCase builds a router with an injected use case for testing.
 // Production uses NewRouter.
-func NewRouterWithUseCase(auth AuthConfig, uc *payment.CreatePaymentUseCase, accountRepo interface{ /* payment repository or compatible */ }) *chi.Mux {
+func NewRouterWithUseCase(auth AuthConfig, uc *payment.CreatePaymentUseCase, accountRepo interface { /* payment repository or compatible */
+}) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Get("/health", handleHealth)
@@ -104,8 +105,4 @@ func handleHealth(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-}
-
-func handleRetryDelivery(w http.ResponseWriter, r *http.Request) {
-	http.Error(w, "Not Implemented", http.StatusNotImplemented)
 }

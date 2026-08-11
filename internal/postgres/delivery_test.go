@@ -163,3 +163,93 @@ func TestSubscriptionRepository_LoadDeliveryTarget_ReturnsURLAndDecryptedSecret(
 	require.Equal(t, "http://consumer.example/target", url)
 	require.Equal(t, "whsec_target_secret", secret)
 }
+
+// TestDeliveryRepository_FindByIDForAccount_ScopesToAccount proves the
+// "scoped to the account" requirement (spec §4.3) against the real join: a
+// delivery that belongs to a different account is reported not found, the
+// same as one that does not exist at all.
+func TestDeliveryRepository_FindByIDForAccount_ScopesToAccount(t *testing.T) {
+	pool := NewTestDB(t)
+	ctx := context.Background()
+	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+
+	ownerAccountID, err := SeedAccount(ctx, pool, uuid.New(), "test_account_delivery_owner", now)
+	require.NoError(t, err)
+	otherAccountID, err := SeedAccount(ctx, pool, uuid.New(), "test_account_delivery_other", now)
+	require.NoError(t, err)
+
+	subRepo := NewSubscriptionRepository(pool, testEncKey())
+	subID := uuid.New()
+	require.NoError(t, subRepo.Create(ctx, subID, ownerAccountID, "http://consumer.example/webhook",
+		[]payment.EventType{payment.EventPaymentApproved}, "whsec_delivery_test", now))
+
+	p := newTestPayment(t, ownerAccountID, payment.TokenCardApproved, now)
+	require.NoError(t, NewPaymentRepository(pool).Insert(ctx, p))
+
+	repo := NewDeliveryRepository(pool, &recordingIDGenerator{})
+	deliveryID, err := repo.Create(ctx, payment.DeliveryDraft{
+		EventID:               uuid.New(),
+		EventType:             payment.EventPaymentApproved,
+		SubscriptionID:        subID,
+		PaymentID:             p.ID,
+		ReferenceID:           p.ReferenceID,
+		Status:                payment.StatusApproved,
+		ProviderTransactionID: p.ProviderTransactionID,
+		CreatedAt:             now,
+	})
+	require.NoError(t, err)
+
+	got, err := repo.FindByIDForAccount(ctx, ownerAccountID, deliveryID)
+	require.NoError(t, err)
+	require.Equal(t, deliveryID, got.ID)
+
+	_, err = repo.FindByIDForAccount(ctx, otherAccountID, deliveryID)
+	require.ErrorIs(t, err, payment.ErrDeliveryNotFound,
+		"a delivery belonging to a different account must be reported not found, not looked up")
+}
+
+// TestDeliveryRepository_UpdateStatus_SetsStatusWithoutTouchingAttemptCount
+// verifies retry's write is narrow: it changes only status, leaving
+// attempt_count and last_attempted_at exactly as RecordAttempt last set them
+// (spec §4.3).
+func TestDeliveryRepository_UpdateStatus_SetsStatusWithoutTouchingAttemptCount(t *testing.T) {
+	pool := NewTestDB(t)
+	ctx := context.Background()
+	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+
+	accountID, err := SeedAccount(ctx, pool, uuid.New(), "test_account_delivery_updatestatus", now)
+	require.NoError(t, err)
+
+	subRepo := NewSubscriptionRepository(pool, testEncKey())
+	subID := uuid.New()
+	require.NoError(t, subRepo.Create(ctx, subID, accountID, "http://consumer.example/webhook",
+		[]payment.EventType{payment.EventPaymentApproved}, "whsec_delivery_test", now))
+
+	p := newTestPayment(t, accountID, payment.TokenCardApproved, now)
+	require.NoError(t, NewPaymentRepository(pool).Insert(ctx, p))
+
+	repo := NewDeliveryRepository(pool, &recordingIDGenerator{})
+	deliveryID, err := repo.Create(ctx, payment.DeliveryDraft{
+		EventID:               uuid.New(),
+		EventType:             payment.EventPaymentApproved,
+		SubscriptionID:        subID,
+		PaymentID:             p.ID,
+		ReferenceID:           p.ReferenceID,
+		Status:                payment.StatusApproved,
+		ProviderTransactionID: p.ProviderTransactionID,
+		CreatedAt:             now,
+	})
+	require.NoError(t, err)
+
+	attemptedAt := now.Add(1 * time.Second)
+	require.NoError(t, repo.RecordAttempt(ctx, deliveryID, payment.DeliveryFailed, 500, attemptedAt))
+
+	require.NoError(t, repo.UpdateStatus(ctx, deliveryID, payment.DeliveryPending))
+
+	got, err := repo.FindByID(ctx, deliveryID)
+	require.NoError(t, err)
+	require.Equal(t, payment.DeliveryPending, got.Status)
+	require.Equal(t, 1, got.AttemptCount, "UpdateStatus must not touch attempt_count")
+	require.True(t, attemptedAt.Equal(got.LastAttemptedAt), "UpdateStatus must not touch last_attempted_at")
+	require.Equal(t, 500, got.LastHTTPStatus, "UpdateStatus must not touch last_http_status")
+}

@@ -118,3 +118,61 @@ func (r *DeliveryRepository) RecordAttempt(ctx context.Context, id uuid.UUID, st
 	}
 	return nil
 }
+
+// FindByIDForAccount loads a delivery by id, scoped to accountID through a
+// join to webhook_subscriptions. A delivery belonging to a different account
+// is indistinguishable from one that does not exist — both report
+// payment.ErrDeliveryNotFound, so a caller can never learn from the response
+// whether an id belongs to someone else (spec §4.3).
+func (r *DeliveryRepository) FindByIDForAccount(ctx context.Context, accountID, id uuid.UUID) (payment.Delivery, error) {
+	var (
+		del             payment.Delivery
+		eventType       string
+		status          string
+		lastAttemptedAt *time.Time
+		lastHTTPStatus  *int
+	)
+	err := querier(ctx, r.pool).QueryRow(ctx,
+		`SELECT d.id, d.subscription_id, d.payment_id, d.event_id, d.event_type, d.payload, d.status,
+		        d.attempt_count, d.last_attempted_at, d.last_http_status, d.created_at
+		 FROM webhook_deliveries d
+		 JOIN webhook_subscriptions s ON s.id = d.subscription_id
+		 WHERE d.id = $1 AND s.account_id = $2`,
+		id, accountID,
+	).Scan(&del.ID, &del.SubscriptionID, &del.PaymentID, &del.EventID, &eventType, &del.Payload,
+		&status, &del.AttemptCount, &lastAttemptedAt, &lastHTTPStatus, &del.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return payment.Delivery{}, payment.ErrDeliveryNotFound
+	}
+	if err != nil {
+		return payment.Delivery{}, err
+	}
+
+	del.EventType = payment.EventType(eventType)
+	del.Status = payment.DeliveryStatus(status)
+	if lastAttemptedAt != nil {
+		del.LastAttemptedAt = *lastAttemptedAt
+	}
+	if lastHTTPStatus != nil {
+		del.LastHTTPStatus = *lastHTTPStatus
+	}
+
+	return del, nil
+}
+
+// UpdateStatus sets a delivery's status directly, without touching
+// attempt_count or last_attempted_at — what retry uses to move a FAILED
+// delivery back to PENDING before re-enqueueing it (spec §4.3).
+func (r *DeliveryRepository) UpdateStatus(ctx context.Context, id uuid.UUID, status payment.DeliveryStatus) error {
+	tag, err := querier(ctx, r.pool).Exec(ctx,
+		`UPDATE webhook_deliveries SET status = $2 WHERE id = $1`,
+		id, string(status),
+	)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return payment.ErrDeliveryNotFound
+	}
+	return nil
+}

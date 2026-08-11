@@ -94,6 +94,18 @@ func (r unusedDeliveryRepository) RecordAttempt(context.Context, uuid.UUID, paym
 	return errors.New("delivery repository must not be called")
 }
 
+func (r unusedDeliveryRepository) FindByIDForAccount(context.Context, uuid.UUID, uuid.UUID) (payment.Delivery, error) {
+	r.t.Helper()
+	r.t.Errorf("DeliveryRepository.FindByIDForAccount was called although there is no active subscription")
+	return payment.Delivery{}, errors.New("delivery repository must not be called")
+}
+
+func (r unusedDeliveryRepository) UpdateStatus(context.Context, uuid.UUID, payment.DeliveryStatus) error {
+	r.t.Helper()
+	r.t.Errorf("DeliveryRepository.UpdateStatus was called although there is no active subscription")
+	return errors.New("delivery repository must not be called")
+}
+
 // recordingIDGenerator hands out real UUIDv7 values and remembers them, so
 // the test can look for exactly the identifiers the use case minted.
 type recordingIDGenerator struct {

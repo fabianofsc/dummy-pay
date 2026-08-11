@@ -232,6 +232,19 @@ type DeliveryRepository interface {
 	// successful or not, records all three (spec §5). httpStatus is 0 for a
 	// transport failure, stored as null rather than a fabricated status code.
 	RecordAttempt(ctx context.Context, id uuid.UUID, status DeliveryStatus, httpStatus int, attemptedAt time.Time) error
+
+	// FindByIDForAccount loads a delivery by id, scoped to accountID through
+	// its subscription. A delivery that exists but belongs to a different
+	// account is reported as ErrDeliveryNotFound, the same as one that does
+	// not exist at all — a caller must never learn from the response whether
+	// an id belongs to someone else (spec §4.3).
+	FindByIDForAccount(ctx context.Context, accountID, id uuid.UUID) (Delivery, error)
+
+	// UpdateStatus sets a delivery's status directly, without touching
+	// attempt_count or last_attempted_at. Retry uses this to move a FAILED
+	// delivery back to PENDING before re-enqueueing it (spec §4.3) — distinct
+	// from RecordAttempt, which is what an actual send attempt writes.
+	UpdateStatus(ctx context.Context, id uuid.UUID, status DeliveryStatus) error
 }
 
 // ClaimedWork is one row claimed from outbox_work: enough for the worker to

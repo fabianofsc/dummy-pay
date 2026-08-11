@@ -264,7 +264,7 @@ func (r *fakeDeliveryRepository) seedDelivery(d Delivery) {
 func (r *fakeDeliveryRepository) FindByID(_ context.Context, id uuid.UUID) (Delivery, error) {
 	d, ok := r.byID[id]
 	if !ok {
-		return Delivery{}, errors.New("fake delivery repository: not found")
+		return Delivery{}, ErrDeliveryNotFound
 	}
 	return *d, nil
 }
@@ -273,12 +273,29 @@ func (r *fakeDeliveryRepository) RecordAttempt(_ context.Context, id uuid.UUID, 
 	r.recordAttemptCalls++
 	d, ok := r.byID[id]
 	if !ok {
-		return errors.New("fake delivery repository: not found")
+		return ErrDeliveryNotFound
 	}
 	d.AttemptCount++
 	d.Status = status
 	d.LastAttemptedAt = attemptedAt
 	d.LastHTTPStatus = httpStatus
+	return nil
+}
+
+// FindByIDForAccount does not model account scoping — the real JOIN-based
+// rejection of another account's delivery is proved separately, against a
+// real database. Here it behaves like FindByID, which is enough to exercise
+// RetryDeliveryUseCase's branching.
+func (r *fakeDeliveryRepository) FindByIDForAccount(ctx context.Context, _ uuid.UUID, id uuid.UUID) (Delivery, error) {
+	return r.FindByID(ctx, id)
+}
+
+func (r *fakeDeliveryRepository) UpdateStatus(_ context.Context, id uuid.UUID, status DeliveryStatus) error {
+	d, ok := r.byID[id]
+	if !ok {
+		return ErrDeliveryNotFound
+	}
+	d.Status = status
 	return nil
 }
 
