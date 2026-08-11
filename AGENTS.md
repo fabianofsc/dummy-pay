@@ -145,6 +145,6 @@ the task is wrong than that the scope is.
 
 Documentation complete. Repository skeleton exists: Go module, the package
 layout from spec §1 (each empty package holds a `doc.go` explaining its role),
-`Makefile`, `docker-compose.yml`, `.env.example`. `GET /healthz` is implemented
+`Makefile`, `docker-compose.yml`, `.env.example`. `GET /health` is implemented
 and test-driven — the only functional code so far. Nothing talks to PostgreSQL
 yet. Next: finish Phase 0 (CI, step 0.2), then Phase 1 in `docs/plan-v1.md`.

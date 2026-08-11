@@ -10,18 +10,18 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// NewRouter builds the top-level router. /healthz is unauthenticated and
+// NewRouter builds the top-level router. /health is unauthenticated and
 // exists for local and orchestrator liveness checks; every route under /v1
 // requires the technical account's credentials once that group exists.
 func NewRouter() *chi.Mux {
 	r := chi.NewRouter()
 
-	r.Get("/healthz", handleHealthz)
+	r.Get("/health", handleHealth)
 
 	return r
 }
 
-func handleHealthz(w http.ResponseWriter, _ *http.Request) {
+func handleHealth(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})

@@ -11,10 +11,10 @@ import (
 	httpapi "dummypay/internal/http"
 )
 
-func TestHealthz_ReturnsOKWithoutAuthentication(t *testing.T) {
+func TestHealth_ReturnsOKWithoutAuthentication(t *testing.T) {
 	router := httpapi.NewRouter()
 
-	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	rec := httptest.NewRecorder()
 
 	router.ServeHTTP(rec, req)
