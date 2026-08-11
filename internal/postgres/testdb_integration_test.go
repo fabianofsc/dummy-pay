@@ -91,8 +91,13 @@ func TestNewTestDB_ParallelCallsDoNotCollide(t *testing.T) {
 }
 
 func TestMigrations_UpDownUpReachesSameSchema(t *testing.T) {
-	dsn := requireDSN(t)
+	// NewTestDB first: it has the correct CI-aware reachability check
+	// (t.Fatalf under CI, t.Skipf locally). Reading DUMMYPAY_DATABASE_URL
+	// afterwards is then safe without duplicating that logic, since
+	// NewTestDB already proved the database reachable — or this line is
+	// never reached.
 	pool := postgres.NewTestDB(t)
+	dsn := mustGetenv(t, dsnEnvVar)
 	ctx := context.Background()
 
 	var schema string
@@ -144,14 +149,17 @@ func listTables(t *testing.T, pool *pgxpool.Pool, schema string) []string {
 
 // requireSchemaAbsent opens its own connection (independent of any pool a
 // prior NewTestDB call may have already closed) and asserts schema no
-// longer appears in information_schema.schemata.
+// longer appears in information_schema.schemata. Callers only reach this
+// with a non-empty schema after a NewTestDB call in this same test already
+// proved the database reachable, so the DSN is read directly here rather
+// than duplicating NewTestDB's CI-aware skip/fail logic.
 func requireSchemaAbsent(t *testing.T, schema string) {
 	t.Helper()
 	if schema == "" {
 		t.Fatalf("requireSchemaAbsent called with empty schema name")
 	}
 
-	dsn := requireDSN(t)
+	dsn := mustGetenv(t, dsnEnvVar)
 	ctx := context.Background()
 	conn, err := pgx.Connect(ctx, dsn)
 	require.NoError(t, err)
@@ -165,14 +173,20 @@ func requireSchemaAbsent(t *testing.T, schema string) {
 	require.Equal(t, 0, count, "schema %s should have been dropped by cleanup", schema)
 }
 
-// requireDSN returns DUMMYPAY_DATABASE_URL or skips/fails the same way
-// NewTestDB does — these auxiliary tests only make sense once NewTestDB
-// itself has already proven the database reachable.
-func requireDSN(t *testing.T) string {
+// dsnEnvVar is the same variable internal/config and postgres.NewTestDB
+// read (spec §9).
+const dsnEnvVar = "DUMMYPAY_DATABASE_URL"
+
+// mustGetenv reads an environment variable that a preceding NewTestDB call
+// in the same test has already proven is set and points at a reachable
+// database. It fails hard (never skips) if that invariant is somehow
+// violated, so this helper cannot become a second, inconsistent path for
+// the CI-must-not-skip contract that NewTestDB alone is responsible for.
+func mustGetenv(t *testing.T, key string) string {
 	t.Helper()
-	dsn, ok := os.LookupEnv("DUMMYPAY_DATABASE_URL")
-	if !ok || dsn == "" {
-		t.Skipf("DUMMYPAY_DATABASE_URL not set")
+	value, ok := os.LookupEnv(key)
+	if !ok || value == "" {
+		t.Fatalf("%s became unset mid-test after a prior NewTestDB call proved it set", key)
 	}
-	return dsn
+	return value
 }

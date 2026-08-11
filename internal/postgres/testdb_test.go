@@ -61,6 +61,27 @@ func NewTestDB(t *testing.T) *pgxpool.Pool {
 		t.Fatalf("create schema %s: %v", schema, err)
 	}
 
+	// Register the drop immediately, before anything else that can fail.
+	// t.Fatalf below (bad migration, pool config error, ...) calls
+	// runtime.Goexit and never returns to this function, so any cleanup
+	// registered *after* such a call would never run and the schema would
+	// leak forever. This cleanup uses its own connection rather than the
+	// pool built below, precisely because the pool may not exist yet when
+	// it fires.
+	t.Cleanup(func() {
+		dropCtx, dropCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer dropCancel()
+		dropConn, err := pgx.Connect(dropCtx, dsn)
+		if err != nil {
+			t.Errorf("connect to drop schema %s: %v", schema, err)
+			return
+		}
+		defer dropConn.Close(dropCtx)
+		if _, err := dropConn.Exec(dropCtx, "DROP SCHEMA "+pgx.Identifier{schema}.Sanitize()+" CASCADE"); err != nil {
+			t.Errorf("drop schema %s: %v", schema, err)
+		}
+	})
+
 	// Every connection made against this DSN is scoped to the fresh schema
 	// via the search_path runtime parameter, rather than qualifying every
 	// migration and query with a `<schema>.` prefix. pg_catalog (uuid,
@@ -97,14 +118,9 @@ func NewTestDB(t *testing.T) *pgxpool.Pool {
 		t.Fatalf("open pool for schema %s: %v", schema, err)
 	}
 
-	t.Cleanup(func() {
-		dropCtx, dropCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer dropCancel()
-		if _, err := pool.Exec(dropCtx, "DROP SCHEMA "+pgx.Identifier{schema}.Sanitize()+" CASCADE"); err != nil {
-			t.Errorf("drop schema %s: %v", schema, err)
-		}
-		pool.Close()
-	})
+	// Registered after the drop cleanup above, so LIFO ordering closes the
+	// pool before the schema underneath it is dropped.
+	t.Cleanup(pool.Close)
 
 	return pool
 }
