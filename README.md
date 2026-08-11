@@ -6,6 +6,8 @@ accepts card data.
 
 - **Why this exists** — [docs/pitch.md](docs/pitch.md)
 - **Why it is built this way** — [docs/decisions/](docs/decisions/)
+- **How it is built** — [docs/spec-v1.md](docs/spec-v1.md)
+- **In what order** — [docs/plan-v1.md](docs/plan-v1.md)
 
 > **Status: design phase.** Nothing is implemented yet. This README describes
 > the V1 contract we are building toward. The "Running locally" section is
