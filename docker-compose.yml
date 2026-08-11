@@ -1,0 +1,21 @@
+# PostgreSQL for local development and integration tests (ADR-0013).
+# DummyPay depends on no other external service.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: dummypay
+      POSTGRES_PASSWORD: dummypay
+      POSTGRES_DB: dummypay
+    ports:
+      - "5432:5432"
+    volumes:
+      - dummypay-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dummypay"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+volumes:
+  dummypay-postgres:

@@ -32,7 +32,7 @@ that satisfies it, so the list is never a summary written after the fact.
 
 ### Phase 0 — Scaffolding
 
-- [ ] **0.1** — Repository skeleton: `go mod`, packages, Makefile, compose, `.env.example`
+- [~] **0.1** — Repository skeleton: `go mod`, packages, Makefile, compose, `.env.example` *(module, packages, Makefile, compose, `.env.example`, and `GET /healthz` done; CI still open, tracked as 0.2)*
 - [ ] **0.2** — CI running build, vet, unit and integration tests
 
 ### Phase 1 — Foundations
