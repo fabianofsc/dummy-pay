@@ -1,5 +1,6 @@
-# PostgreSQL for local development and integration tests (ADR-0013).
-# DummyPay depends on no other external service.
+# PostgreSQL and DummyPay for local development and integration tests.
+# docker compose up    → starts postgres + dummypay (builds the image)
+# docker compose down  → stops everything
 services:
   postgres:
     image: postgres:16-alpine
@@ -16,6 +17,24 @@ services:
       interval: 2s
       timeout: 2s
       retries: 15
+
+  dummypay:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      DUMMYPAY_HTTP_ADDR: ":8080"
+      DUMMYPAY_DATABASE_URL: "postgres://dummypay:dummypay@postgres:5432/dummypay?sslmode=disable"
+      DUMMYPAY_ACCOUNT_KEY_ID: "local-dev-account"
+      DUMMYPAY_ACCOUNT_KEY_SECRET: "change-me-to-a-long-random-value"
+      DUMMYPAY_WEBHOOK_SECRET_ENC_KEY: "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE="
+      DUMMYPAY_PROCESSING_DELAY: "3s"
+      DUMMYPAY_IDEMPOTENCY_LEASE: "30s"
+      DUMMYPAY_WORKER_POLL_INTERVAL: "250ms"
+      DUMMYPAY_WEBHOOK_TIMEOUT: "5s"
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   dummypay-postgres:

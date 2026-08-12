@@ -15,7 +15,7 @@ func TestSeedAccountCreatesNewRow(t *testing.T) {
 	ctx := context.Background()
 	candidateID := uuid.New()
 	keyID := "test_account_key"
-	now := time.Now().UTC()
+	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
 
 	// First call should create a new row and return the candidateID.
 	id, err := SeedAccount(ctx, pool, candidateID, keyID, now)
@@ -42,7 +42,7 @@ func TestSeedAccountRepeatWithSameKeyIDReturnsExistingID(t *testing.T) {
 
 	ctx := context.Background()
 	keyID := "test_account_key_repeat"
-	now := time.Now().UTC()
+	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
 
 	// First call with candidateID1.
 	candidateID1 := uuid.New()
@@ -74,7 +74,7 @@ func TestSeedAccountDifferentKeyIDsProduceDifferentRows(t *testing.T) {
 	pool := NewTestDB(t)
 
 	ctx := context.Background()
-	now := time.Now().UTC()
+	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
 
 	// First account.
 	candidateID1 := uuid.New()

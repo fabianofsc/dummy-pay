@@ -9,13 +9,6 @@ accepts card data.
 - **How it is built** — [docs/spec-v1.md](docs/spec-v1.md)
 - **In what order, and what's done so far** — [docs/plan-v1.md](docs/plan-v1.md#roadmap)
 
-> **Status: early implementation.** This README describes the full V1 contract;
-> most of it is not built yet. What exists today: the Go module, the package
-> skeleton, and `GET /health`. See
-> [the roadmap](docs/plan-v1.md#roadmap) for exactly what's done.
-
----
-
 ## Table of contents
 
 - [What it does](#what-it-does)
@@ -298,19 +291,47 @@ gitignored, so nothing there ever reaches a commit.
 
 ## Running locally
 
-What works today:
+**Only Docker is required.** Clone and run:
 
 ```sh
-cp .env.example .env      # then edit the values you care about
-docker compose up -d      # PostgreSQL
-go run ./cmd/dummypay      # serves on :8080
-curl http://localhost:8080/health
-# {"status":"ok"}
+make run                         # builds image, starts postgres + dummypay
 ```
 
-`/v1/payments` and `/v1/webhook-subscriptions` are not implemented yet — see
-the [roadmap](docs/plan-v1.md#roadmap). The service does not yet read
-`DUMMYPAY_DATABASE_URL` or apply migrations; `/health` is the only route.
+To stop: `make docker-stop`.
+
+The credentials for the default account are `local-dev-account` /
+`change-me-to-a-long-random-value`. Edit them and the encryption key in
+`docker-compose.yml` if needed.
+
+For Go-based development (requires Go + `.env`):
+
+```sh
+make run-local
+```
+
+### Quick verification
+
+```sh
+auth=$(echo -n 'local-dev-account:change-me-to-a-long-random-value' | base64)
+
+curl http://localhost:8080/health
+# {"status":"ok"}
+
+curl -s -X POST http://localhost:8080/v1/payments \
+  -H "Authorization: Basic $auth" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: test-1" \
+  -d '{"reference_id":"checkout:verify","amount":10990,"currency":"BRL","payment_token":"card_approved"}' | jq .
+
+curl -s -X POST http://localhost:8080/v1/webhook-subscriptions \
+  -H "Authorization: Basic $auth" \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com/webhook","events":["payment.approved","payment.rejected","payment.processing"]}' | jq .
+```
+
+A full smoke-test script is at [docs/smoke-test.md](docs/smoke-test.md). An
+Insomnia collection covering every endpoint and error case is at
+[docs/insomnia-collection.yaml](docs/insomnia-collection.yaml).
 
 ## Testing
 

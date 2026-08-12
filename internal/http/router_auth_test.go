@@ -2,6 +2,7 @@ package httpapi_test
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -39,6 +40,11 @@ func TestV1Routes_WithoutCredentials_Returns401(t *testing.T) {
 
 			require.Equal(t, http.StatusUnauthorized, rec.Code,
 				"route %s %s must return 401 without credentials", tt.method, tt.path)
+			require.Equal(t, "application/json", rec.Header().Get("Content-Type"))
+
+			var errResp httpapi.ErrorResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &errResp))
+			require.Equal(t, "unauthorized", errResp.Code)
 		})
 	}
 }
@@ -70,6 +76,11 @@ func TestV1Routes_WithWrongCredentials_Returns401(t *testing.T) {
 
 			require.Equal(t, http.StatusUnauthorized, rec.Code,
 				"route %s %s must return 401 with wrong credentials", tt.method, tt.path)
+			require.Equal(t, "application/json", rec.Header().Get("Content-Type"))
+
+			var errResp httpapi.ErrorResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &errResp))
+			require.Equal(t, "unauthorized", errResp.Code)
 		})
 	}
 }

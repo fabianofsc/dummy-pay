@@ -92,9 +92,7 @@ func handleCreateSubscription(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Placeholder: wiring to the repository and secret generation happens
-	// once the use case is assembled (Phase 11).
-	http.Error(w, "Not Implemented", http.StatusNotImplemented)
+	respondError(w, http.StatusNotImplemented, "internal_error", "not implemented")
 }
 
 func newCreateSubscriptionResponse(result payment.CreateSubscriptionResult) CreateSubscriptionResponse {

@@ -6,8 +6,10 @@ package httpapi
 import (
 	"encoding/base64"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -80,6 +82,8 @@ type ProductionRouterDeps struct {
 func NewProductionRouter(deps ProductionRouterDeps) *chi.Mux {
 	r := chi.NewRouter()
 
+	r.Use(requestLogger)
+
 	r.Get("/health", handleHealth)
 
 	r.Route("/v1", func(v1 chi.Router) {
@@ -101,31 +105,31 @@ func basicAuthMiddleware(auth AuthConfig) func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				respondError(w, http.StatusUnauthorized, "unauthorized", "missing Authorization header")
 				return
 			}
 
 			const prefix = "Basic "
 			if !strings.HasPrefix(authHeader, prefix) {
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				respondError(w, http.StatusUnauthorized, "unauthorized", "invalid Authorization scheme")
 				return
 			}
 
 			decoded, err := base64.StdEncoding.DecodeString(authHeader[len(prefix):])
 			if err != nil {
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				respondError(w, http.StatusUnauthorized, "unauthorized", "invalid Authorization encoding")
 				return
 			}
 
 			parts := strings.SplitN(string(decoded), ":", 2)
 			if len(parts) != 2 {
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				respondError(w, http.StatusUnauthorized, "unauthorized", "invalid credentials format")
 				return
 			}
 
 			keyID, keySecret := parts[0], parts[1]
 			if keyID != auth.AccountKeyID || keySecret != auth.AccountKeySecret {
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				respondError(w, http.StatusUnauthorized, "unauthorized", "invalid credentials")
 				return
 			}
 
@@ -138,4 +142,23 @@ func handleHealth(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	r.status = code
+	r.ResponseWriter.WriteHeader(code)
+}
+
+func requestLogger(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(rec, r)
+		log.Printf("%s %s %d %s", r.Method, r.URL.Path, rec.status, time.Since(start).Round(time.Microsecond))
+	})
 }

@@ -47,8 +47,7 @@ func handleRetryDelivery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Placeholder: for now, return 501 to indicate the use case is not wired.
-	http.Error(w, "Not Implemented", http.StatusNotImplemented)
+	respondError(w, http.StatusNotImplemented, "internal_error", "not implemented")
 }
 
 // decodeRetryDeliveryID parses and verifies the dlv_ prefix of the

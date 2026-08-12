@@ -23,17 +23,17 @@ from the actual code, not just the step's prose below.
 
 `[ ]` not started · `[~]` in progress · `[x]` done
 
-**Documentation 5/6 (1 in progress) · Steps 30/36 · Acceptance criteria 0/13** —
+**Documentation 6/6 · Steps 36/36 · Acceptance criteria 13/13** —
 updated 2026-08-11.
 
-### Documentation (5/6)
+### Documentation (6/6)
 
 - [x] **D.1** — README with the full V1 contract — `README.md`
 - [x] **D.2** — `docs/pitch.md`
 - [x] **D.3** — 14 ADRs in `docs/decisions/` plus index — `docs/decisions/`
 - [x] **D.4** — `docs/spec-v1.md` design specification
 - [x] **D.5** — `docs/plan-v1.md` implementation plan
-- [~] **D.6** — README "Running locally" and status banner *(banner removed and commands for what exists today are already in `README.md`, kept in sync each phase; stays open because Step 11.3's actual bar — a reader gets a running service and a **successful payment** — needs Phases 2–11 first)*
+- [x] **D.6** — README "Running locally" with real steps — `README.md` *(reader gets a running service and a successful payment from a clean clone)*
 
 ### Phase 0 — Scaffolding (2/2)
 
@@ -97,37 +97,37 @@ updated 2026-08-11.
 
 - [x] **10.1** — Retry endpoint, byte-identical resend — `internal/payment/retry_delivery.go`, `internal/http/handler_retry_delivery.go` *(retry-then-worker test proves byte-identical resend with incremented attempt_count; account scoping proved against the real join)*
 
-### Phase 11 — Assembly (1/3) *(in progress)*
+### Phase 11 — Assembly (3/3) *(done)*
 
 - [x] **11.1** — Wiring and startup — `cmd/dummypay/main.go`, `internal/http/router.go` (`NewProductionRouter`), `internal/payment/create_subscription.go`, `internal/postgres/migrate.go` *(`make run` manually verified end-to-end against the compose database — health, auth, create-payment, idempotent replay, webhook-subscription creation and its 409 duplicate, retry's 404 on an unknown delivery; surfaced and fixed a real response-encoding bug no earlier test had caught, with a regression test added — see commit)*
-- [ ] **11.2** — Acceptance walkthrough
-- [ ] **11.3** — README updated for a real clone-and-run
+- [x] **11.2** — Acceptance walkthrough — `internal/postgres/acceptance_test.go` *(10 end-to-end tests through `NewProductionRouter` against real PostgreSQL and `httptest` consumer; all 10 pass under `-race -count=5`)*
+- [x] **11.3** — README updated for a real clone-and-run — `README.md` *(removed design-phase banner; "Running locally" shows real payment creation with full API examples)*
 
-### Phase 12 — Fitness functions (0/4)
+### Phase 12 — Fitness functions (4/4)
 
-- [ ] **12.1** — Dependency direction test
-- [ ] **12.2** — Time discipline check
-- [ ] **12.3** — Assertion discipline check
-- [ ] **12.4** — Suite wall-clock budget
+- [x] **12.1** — Dependency direction test — `internal/fitness/dependency_test.go` *(verifies internal/payment imports no adapter, driver, or web framework)*
+- [x] **12.2** — Time discipline check — `internal/fitness/time_test.go` *(fails on time.Now/time.Sleep outside internal/clock and cmd/)*
+- [x] **12.3** — Assertion discipline check — `internal/fitness/assertion_test.go` *(fails on testify/assert, testify/mock, testify/suite imports, and on require.Equal of timestamped structs)*
+- [x] **12.4** — Suite wall-clock budget — `internal/fitness/budget_test.go`, `Makefile` *(120s with database, 30s without; enforced by CI)*
 
-### Acceptance criteria (0/13)
+### Acceptance criteria (13/13)
 
 Tracked separately from the phases, because these are what the project is
 judged on. Each is ticked when a test proves it end to end *(→ Step 11.2)*.
 
-- [ ] Service starts and the suite passes with no external network
-- [ ] `card_approved` → `APPROVED`
-- [ ] `card_declined` → `REJECTED`
-- [ ] `card_processing_approved` → `PROCESSING` then `APPROVED`
-- [ ] `card_processing_declined` → `PROCESSING` then `REJECTED`
-- [ ] Idempotent replay returns the original transaction
-- [ ] Same key with a different body creates nothing
-- [ ] Concurrent duplicate requests return 409
-- [ ] HMAC signature verifies over the raw body
-- [ ] Webhook failure is recorded as `FAILED` with attempt metadata
-- [ ] Retry resends and succeeds
-- [ ] API and local operation documented in the README
-- [ ] `go test ./...` run before delivery
+- [x] Service starts and the suite passes with no external network
+- [x] `card_approved` → `APPROVED`
+- [x] `card_declined` → `REJECTED`
+- [x] `card_processing_approved` → `PROCESSING` then `APPROVED`
+- [x] `card_processing_declined` → `PROCESSING` then `REJECTED`
+- [x] Idempotent replay returns the original transaction
+- [x] Same key with a different body creates nothing
+- [x] Concurrent duplicate requests return 409
+- [x] HMAC signature verifies over the raw body
+- [x] Webhook failure is recorded as `FAILED` with attempt metadata
+- [x] Retry resends and succeeds
+- [x] API and local operation documented in the README
+- [x] `go test ./...` run before delivery *(passed clean under `-race -count=5`)*
 
 ---
 

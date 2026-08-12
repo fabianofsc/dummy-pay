@@ -1,27 +1,36 @@
-.PHONY: run test test-integration lint db-up db-down
+.PHONY: run test test-integration lint db-up db-down docker-run docker-stop
 
-run:
-	go run ./cmd/dummypay
+# run starts postgres and dummypay via docker compose — only Docker required.
+# No Go, no .env, no manual setup: clone, make run, smoke-test.
+run: docker-run
 
-# Runs everything go test ./... finds. Currently unit-only: the integration
-# harness (schema-per-test against PostgreSQL, ADR-0013) lands in plan step
-# 3.1. Once it exists, tests behind it skip automatically when no database is
-# reachable, so this target keeps working unchanged.
+# Go-native targets (needs Go + .env, used during development)
+run-local: db-up
+	export $$(grep -v '^#' .env | xargs) && go run ./cmd/dummypay
+
 test:
 	go test ./...
 
-# Same command as `test` today. Once plan step 3.1 lands, integration tests
-# self-skip without a database; this target additionally requires one to be
-# up via `make db-up` first, and is the target CI runs so a skip there means
-# what it should: a database was expected and missing.
 test-integration: db-up
 	go test ./... -v
 
-# go vet today. Grows into the fitness functions from plan phase 12
-# (dependency direction, time discipline, assertion discipline) as they land.
 lint:
 	go vet ./...
+	go test ./internal/fitness/ -run 'TestDependencyDirection|TestTimeDiscipline|TestAssertionDiscipline|TestSuiteWallClockBudget' -count=1
 
+suite-budget:
+	@timeout 120s go test ./... -race -count=1 || (echo "suite exceeded wall-clock budget of 120s"; exit 1)
+
+# docker-run builds the dummypay image and starts postgres + dummypay.
+# Credentials are set in docker-compose.yml — edit there if needed.
+docker-run:
+	docker compose up --build -d
+	@echo "dummypay listening on :8080"
+
+docker-stop:
+	docker compose down
+
+# database-only targets (legacy, used by run-local and test-integration)
 db-up:
 	docker compose up -d postgres
 	@echo "waiting for postgres to be healthy..."

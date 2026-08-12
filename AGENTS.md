@@ -143,18 +143,4 @@ the task is wrong than that the scope is.
 
 ## Current state
 
-Documentation complete. **Phase 0 (Scaffolding), Phase 1 (Foundations), and
-Phase 2 (Domain) are done** — see [the roadmap](docs/plan-v1.md#roadmap) for
-the authoritative, per-step status. In place: the Go module and package
-layout, `Makefile`, `docker-compose.yml`, `.env.example`, CI
-(`.github/workflows/ci.yml`, verified locally — not yet exercised by GitHub
-Actions since no remote is configured), `GET /health`, environment
-configuration (`internal/config`), the injected `Clock` and UUIDv7
-`IDGenerator` ports and their implementations (`internal/payment/ports.go`,
-`internal/clock`), the identifier prefix codec (`internal/http/idcodec.go`),
-and the domain model — `Amount`/`Currency`/`ScenarioToken` value objects, the
-`Payment` state machine, and event selection (`internal/payment/valueobjects.go`,
-`internal/payment/payment.go`, `internal/payment/events.go`). 97 tests pass
-clean under `-race -count=5`. Nothing talks to PostgreSQL yet — no repository,
-no migrations, no use case wiring the domain to HTTP. Next: Phase 3 —
-Persistence, step 3.1.
+All 36 plan steps complete, all 13 acceptance criteria verified. The full V1 contract is implemented: `GET /health`, `POST /v1/payments` with idempotency, `POST /v1/webhook-subscriptions` with AES-256-GCM secret encryption, `POST /v1/webhook-deliveries/{delivery_id}/retry`, outbox worker with `FOR UPDATE SKIP LOCKED`, HMAC-signed webhook delivery with exact-byte retry, and four fitness-function tests. The suite passes clean under `-race -count=5` with no external network.

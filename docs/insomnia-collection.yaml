@@ -1,0 +1,754 @@
+type: collection.insomnia.rest/5.0
+schema_version: "5.1"
+name: DummyPay V1
+meta:
+  id: wrk_dummypay
+  created: 1700000000000
+  modified: 1700000000000
+collection:
+  - name: Health
+    meta:
+      id: fld_health
+      created: 1700000000000
+      modified: 1700000000000
+      sortKey: 0
+    children:
+      - url: "{{ _.base_url }}/health"
+        name: GET /health
+        meta:
+          id: req_health
+          created: 1700000000000
+          modified: 1700000000000
+          isPrivate: false
+          sortKey: 0
+        method: GET
+        scripts:
+          afterResponse: |-
+            insomnia.test('status 200', () => insomnia.response.to.have.status(200));
+            insomnia.test('body is JSON', () => insomnia.response.to.be.json);
+            const body = insomnia.response.json();
+            insomnia.test('status is ok', () => insomnia.expect(body.status).to.eql('ok'));
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+  - name: Payments
+    meta:
+      id: fld_payments
+      created: 1700000000000
+      modified: 1700000000000
+      sortKey: 1
+    children:
+      - url: "{{ _.base_url }}/v1/payments"
+        name: "1. card_approved → APPROVED"
+        meta:
+          id: req_pay_approved
+          created: 1700000000000
+          modified: 1700000000000
+          isPrivate: false
+          sortKey: 0
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {"reference_id":"checkout:approved","amount":10990,"currency":"BRL","payment_token":"card_approved"}
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Idempotency-Key
+            value: ik-approved-1
+        authentication:
+          type: basic
+          username: local-dev-account
+          password: change-me-to-a-long-random-value
+        scripts:
+          afterResponse: |-
+            insomnia.test('status 201', () => insomnia.response.to.have.status(201));
+            const body = insomnia.response.json();
+            insomnia.test('pay_ prefix', () => insomnia.expect(body.payment_id).to.match(/^pay_/));
+            insomnia.test('txn_ prefix', () => insomnia.expect(body.provider_transaction_id).to.match(/^txn_/));
+            insomnia.test('status APPROVED', () => insomnia.expect(body.status).to.eql('APPROVED'));
+            insomnia.test('amount correct', () => insomnia.expect(body.amount).to.eql(10990));
+            insomnia.test('has created_at', () => insomnia.expect(body.created_at).to.be.a('string'));
+            insomnia.environment.set('payment_id', body.payment_id);
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ _.base_url }}/v1/payments"
+        name: "2. card_declined → REJECTED"
+        meta:
+          id: req_pay_declined
+          created: 1700000000000
+          modified: 1700000000000
+          isPrivate: false
+          sortKey: 1
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {"reference_id":"checkout:declined","amount":5000,"currency":"BRL","payment_token":"card_declined"}
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Idempotency-Key
+            value: ik-declined-1
+        authentication:
+          type: basic
+          username: local-dev-account
+          password: change-me-to-a-long-random-value
+        scripts:
+          afterResponse: |-
+            insomnia.test('status 201', () => insomnia.response.to.have.status(201));
+            const body = insomnia.response.json();
+            insomnia.test('status REJECTED', () => insomnia.expect(body.status).to.eql('REJECTED'));
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ _.base_url }}/v1/payments"
+        name: "3. card_processing_approved → PROCESSING"
+        meta:
+          id: req_pay_processing_ok
+          created: 1700000000000
+          modified: 1700000000000
+          isPrivate: false
+          sortKey: 2
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {"reference_id":"checkout:proc-ok","amount":25000,"currency":"BRL","payment_token":"card_processing_approved"}
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Idempotency-Key
+            value: ik-processing-ok
+        authentication:
+          type: basic
+          username: local-dev-account
+          password: change-me-to-a-long-random-value
+        scripts:
+          afterResponse: |-
+            insomnia.test('status 201', () => insomnia.response.to.have.status(201));
+            const body = insomnia.response.json();
+            insomnia.test('status PROCESSING', () => insomnia.expect(body.status).to.eql('PROCESSING'));
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ _.base_url }}/v1/payments"
+        name: "4. card_processing_declined → PROCESSING"
+        meta:
+          id: req_pay_processing_no
+          created: 1700000000000
+          modified: 1700000000000
+          isPrivate: false
+          sortKey: 3
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {"reference_id":"checkout:proc-no","amount":10000,"currency":"BRL","payment_token":"card_processing_declined"}
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Idempotency-Key
+            value: ik-processing-no
+        authentication:
+          type: basic
+          username: local-dev-account
+          password: change-me-to-a-long-random-value
+        scripts:
+          afterResponse: |-
+            insomnia.test('status 201', () => insomnia.response.to.have.status(201));
+            const body = insomnia.response.json();
+            insomnia.test('status PROCESSING', () => insomnia.expect(body.status).to.eql('PROCESSING'));
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ _.base_url }}/v1/payments"
+        name: "5. Idempotent replay → 201"
+        meta:
+          id: req_pay_replay
+          created: 1700000000000
+          modified: 1700000000000
+          isPrivate: false
+          sortKey: 4
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {"reference_id":"checkout:approved","amount":10990,"currency":"BRL","payment_token":"card_approved"}
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Idempotency-Key
+            value: ik-approved-1
+        authentication:
+          type: basic
+          username: local-dev-account
+          password: change-me-to-a-long-random-value
+        scripts:
+          afterResponse: |-
+            insomnia.test('status 201', () => insomnia.response.to.have.status(201));
+            const body = insomnia.response.json();
+            const savedId = insomnia.environment.get('payment_id');
+            insomnia.test('same payment_id as #1', () => insomnia.expect(body.payment_id).to.eql(savedId));
+            insomnia.test('status APPROVED', () => insomnia.expect(body.status).to.eql('APPROVED'));
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ _.base_url }}/v1/payments"
+        name: "6. Key reuse → 422"
+        meta:
+          id: req_pay_reuse
+          created: 1700000000000
+          modified: 1700000000000
+          isPrivate: false
+          sortKey: 5
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {"reference_id":"checkout:different","amount":9999,"currency":"BRL","payment_token":"card_declined"}
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Idempotency-Key
+            value: ik-approved-1
+        authentication:
+          type: basic
+          username: local-dev-account
+          password: change-me-to-a-long-random-value
+        scripts:
+          afterResponse: |-
+            insomnia.test('status 422', () => insomnia.response.to.have.status(422));
+            const body = insomnia.response.json();
+            insomnia.test('code idempotency_key_reuse', () => insomnia.expect(body.code).to.eql('idempotency_key_reuse'));
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+  - name: Payments - Errors
+    meta:
+      id: fld_payments_err
+      created: 1700000000000
+      modified: 1700000000000
+      sortKey: 2
+    children:
+      - url: "{{ _.base_url }}/v1/payments"
+        name: "No auth → 401"
+        meta:
+          id: req_pay_no_auth
+          created: 1700000000000
+          modified: 1700000000000
+          isPrivate: false
+          sortKey: 0
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {"reference_id":"t","amount":1000,"currency":"BRL","payment_token":"card_approved"}
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Idempotency-Key
+            value: ik-no-auth
+        scripts:
+          afterResponse: |-
+            insomnia.test('status 401', () => insomnia.response.to.have.status(401));
+            insomnia.test('Content-Type is JSON', () => insomnia.expect(insomnia.response.headers.get('Content-Type')).to.match(/application\/json/));
+            const body = insomnia.response.json();
+            insomnia.test('code unauthorized', () => insomnia.expect(body.code).to.eql('unauthorized'));
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ _.base_url }}/v1/payments"
+        name: "Missing Idempotency-Key → 400"
+        meta:
+          id: req_pay_no_idem
+          created: 1700000000000
+          modified: 1700000000000
+          isPrivate: false
+          sortKey: 1
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {"reference_id":"t","amount":1000,"currency":"BRL","payment_token":"card_approved"}
+        headers:
+          - name: Content-Type
+            value: application/json
+        authentication:
+          type: basic
+          username: local-dev-account
+          password: change-me-to-a-long-random-value
+        scripts:
+          afterResponse: |-
+            insomnia.test('status 400', () => insomnia.response.to.have.status(400));
+            const body = insomnia.response.json();
+            insomnia.test('code invalid_request', () => insomnia.expect(body.code).to.eql('invalid_request'));
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ _.base_url }}/v1/payments"
+        name: "card_number → 400"
+        meta:
+          id: req_pay_card_num
+          created: 1700000000000
+          modified: 1700000000000
+          isPrivate: false
+          sortKey: 2
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {"reference_id":"t","amount":1000,"currency":"BRL","payment_token":"card_approved","card_number":"4111..."}
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Idempotency-Key
+            value: ik-card-num
+        authentication:
+          type: basic
+          username: local-dev-account
+          password: change-me-to-a-long-random-value
+        scripts:
+          afterResponse: |-
+            insomnia.test('status 400', () => insomnia.response.to.have.status(400));
+            const body = insomnia.response.json();
+            insomnia.test('code invalid_request', () => insomnia.expect(body.code).to.eql('invalid_request'));
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ _.base_url }}/v1/payments"
+        name: "Amount zero → 422"
+        meta:
+          id: req_pay_zero
+          created: 1700000000000
+          modified: 1700000000000
+          isPrivate: false
+          sortKey: 3
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {"reference_id":"t","amount":0,"currency":"BRL","payment_token":"card_approved"}
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Idempotency-Key
+            value: ik-zero
+        authentication:
+          type: basic
+          username: local-dev-account
+          password: change-me-to-a-long-random-value
+        scripts:
+          afterResponse: |-
+            insomnia.test('status 422', () => insomnia.response.to.have.status(422));
+            const body = insomnia.response.json();
+            insomnia.test('code invalid_amount', () => insomnia.expect(body.code).to.eql('invalid_amount'));
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ _.base_url }}/v1/payments"
+        name: "Amount negative → 422"
+        meta:
+          id: req_pay_neg
+          created: 1700000000000
+          modified: 1700000000000
+          isPrivate: false
+          sortKey: 4
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {"reference_id":"t","amount":-100,"currency":"BRL","payment_token":"card_approved"}
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Idempotency-Key
+            value: ik-neg
+        authentication:
+          type: basic
+          username: local-dev-account
+          password: change-me-to-a-long-random-value
+        scripts:
+          afterResponse: |-
+            insomnia.test('status 422', () => insomnia.response.to.have.status(422));
+            const body = insomnia.response.json();
+            insomnia.test('code invalid_amount', () => insomnia.expect(body.code).to.eql('invalid_amount'));
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ _.base_url }}/v1/payments"
+        name: "Currency USD → 422"
+        meta:
+          id: req_pay_usd
+          created: 1700000000000
+          modified: 1700000000000
+          isPrivate: false
+          sortKey: 5
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {"reference_id":"t","amount":1000,"currency":"USD","payment_token":"card_approved"}
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Idempotency-Key
+            value: ik-usd
+        authentication:
+          type: basic
+          username: local-dev-account
+          password: change-me-to-a-long-random-value
+        scripts:
+          afterResponse: |-
+            insomnia.test('status 422', () => insomnia.response.to.have.status(422));
+            const body = insomnia.response.json();
+            insomnia.test('code unsupported_currency', () => insomnia.expect(body.code).to.eql('unsupported_currency'));
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ _.base_url }}/v1/payments"
+        name: "Unknown token → 422"
+        meta:
+          id: req_pay_bad_token
+          created: 1700000000000
+          modified: 1700000000000
+          isPrivate: false
+          sortKey: 6
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {"reference_id":"t","amount":1000,"currency":"BRL","payment_token":"invalid_token"}
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Idempotency-Key
+            value: ik-bad-token
+        authentication:
+          type: basic
+          username: local-dev-account
+          password: change-me-to-a-long-random-value
+        scripts:
+          afterResponse: |-
+            insomnia.test('status 422', () => insomnia.response.to.have.status(422));
+            const body = insomnia.response.json();
+            insomnia.test('code unknown_payment_token', () => insomnia.expect(body.code).to.eql('unknown_payment_token'));
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ _.base_url }}/v1/payments"
+        name: "Malformed JSON → 400"
+        meta:
+          id: req_pay_malformed
+          created: 1700000000000
+          modified: 1700000000000
+          isPrivate: false
+          sortKey: 7
+        method: POST
+        body:
+          mimeType: application/json
+          text: not json
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Idempotency-Key
+            value: ik-malformed
+        authentication:
+          type: basic
+          username: local-dev-account
+          password: change-me-to-a-long-random-value
+        scripts:
+          afterResponse: |-
+            insomnia.test('status 400', () => insomnia.response.to.have.status(400));
+            const body = insomnia.response.json();
+            insomnia.test('code invalid_request', () => insomnia.expect(body.code).to.eql('invalid_request'));
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+  - name: Webhook Subscriptions
+    meta:
+      id: fld_subscriptions
+      created: 1700000000000
+      modified: 1700000000000
+      sortKey: 3
+    children:
+      - url: "{{ _.base_url }}/v1/webhook-subscriptions"
+        name: "Create → 201"
+        meta:
+          id: req_sub_create
+          created: 1700000000000
+          modified: 1700000000000
+          isPrivate: false
+          sortKey: 0
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {"url":"https://example.com/webhook","events":["payment.approved","payment.rejected","payment.processing"]}
+        headers:
+          - name: Content-Type
+            value: application/json
+        authentication:
+          type: basic
+          username: local-dev-account
+          password: change-me-to-a-long-random-value
+        scripts:
+          afterResponse: |-
+            insomnia.test('status 201', () => insomnia.response.to.have.status(201));
+            const body = insomnia.response.json();
+            insomnia.test('sub_ prefix', () => insomnia.expect(body.subscription_id).to.match(/^sub_/));
+            insomnia.test('secret whsec_ prefix', () => insomnia.expect(body.secret).to.match(/^whsec_/));
+            insomnia.test('has events', () => insomnia.expect(body.events).to.have.lengthOf(3));
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ _.base_url }}/v1/webhook-subscriptions"
+        name: "Duplicate → 409"
+        meta:
+          id: req_sub_dup
+          created: 1700000000000
+          modified: 1700000000000
+          isPrivate: false
+          sortKey: 1
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {"url":"https://example.com/other","events":["payment.approved"]}
+        headers:
+          - name: Content-Type
+            value: application/json
+        authentication:
+          type: basic
+          username: local-dev-account
+          password: change-me-to-a-long-random-value
+        scripts:
+          afterResponse: |-
+            insomnia.test('status 409', () => insomnia.response.to.have.status(409));
+            const body = insomnia.response.json();
+            insomnia.test('code subscription_exists', () => insomnia.expect(body.code).to.eql('subscription_exists'));
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ _.base_url }}/v1/webhook-subscriptions"
+        name: "Invalid URL → 422"
+        meta:
+          id: req_sub_bad_url
+          created: 1700000000000
+          modified: 1700000000000
+          isPrivate: false
+          sortKey: 2
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {"url":"not-a-url","events":["payment.approved"]}
+        headers:
+          - name: Content-Type
+            value: application/json
+        authentication:
+          type: basic
+          username: local-dev-account
+          password: change-me-to-a-long-random-value
+        scripts:
+          afterResponse: |-
+            insomnia.test('status 422', () => insomnia.response.to.have.status(422));
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ _.base_url }}/v1/webhook-subscriptions"
+        name: "Unknown event → 422"
+        meta:
+          id: req_sub_bad_event
+          created: 1700000000000
+          modified: 1700000000000
+          isPrivate: false
+          sortKey: 3
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {"url":"https://example.com/webhook","events":["payment.refunded"]}
+        headers:
+          - name: Content-Type
+            value: application/json
+        authentication:
+          type: basic
+          username: local-dev-account
+          password: change-me-to-a-long-random-value
+        scripts:
+          afterResponse: |-
+            insomnia.test('status 422', () => insomnia.response.to.have.status(422));
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+  - name: Webhook Retry
+    meta:
+      id: fld_retry
+      created: 1700000000000
+      modified: 1700000000000
+      sortKey: 4
+    children:
+      - url: "{{ _.base_url }}/v1/webhook-deliveries/dlv_00000000-0000-0000-0000-000000000000/retry"
+        name: "Unknown → 404"
+        meta:
+          id: req_retry_404
+          created: 1700000000000
+          modified: 1700000000000
+          isPrivate: false
+          sortKey: 0
+        method: POST
+        authentication:
+          type: basic
+          username: local-dev-account
+          password: change-me-to-a-long-random-value
+        scripts:
+          afterResponse: |-
+            insomnia.test('status 404', () => insomnia.response.to.have.status(404));
+            const body = insomnia.response.json();
+            insomnia.test('code not_found', () => insomnia.expect(body.code).to.eql('not_found'));
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ _.base_url }}/v1/webhook-deliveries/pay_00000000-0000-0000-0000-000000000000/retry"
+        name: "Wrong prefix → 404"
+        meta:
+          id: req_retry_prefix
+          created: 1700000000000
+          modified: 1700000000000
+          isPrivate: false
+          sortKey: 1
+        method: POST
+        authentication:
+          type: basic
+          username: local-dev-account
+          password: change-me-to-a-long-random-value
+        scripts:
+          afterResponse: |-
+            insomnia.test('status 404', () => insomnia.response.to.have.status(404));
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+cookieJar:
+  name: Default Jar
+  meta:
+    id: jar_default
+    created: 1700000000000
+    modified: 1700000000000
+environments:
+  name: Base Environment
+  meta:
+    id: env_base
+    created: 1700000000000
+    modified: 1700000000000
+    isPrivate: false
+  data:
+    base_url: http://localhost:8080
+    payment_id: ""
+    delivery_id: "dlv_00000000-0000-0000-0000-000000000000"

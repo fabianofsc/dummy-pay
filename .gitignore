@@ -16,3 +16,12 @@ coverage.*
 .DS_Store
 .idea/
 .vscode/
+
+# Agent directories
+.agents/
+.claude/
+skills-lock.json
+
+# Test binaries
+test.bin
+postgres.test

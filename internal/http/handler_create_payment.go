@@ -2,6 +2,8 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
+	"log"
 	"net/http"
 	"strings"
 
@@ -68,10 +70,6 @@ func makeHandleCreatePayment(uc *payment.CreatePaymentUseCase, accountID uuid.UU
 
 		// Execute use case.
 		result, err := uc.Execute(r.Context(), ucReq, func(p payment.Payment) (int, []byte) {
-			// Response encoder: returns status and serialized body. Called
-			// once, inside the use case's transaction, and the exact bytes
-			// returned here are what a replay gets back verbatim — never
-			// re-encoded (spec §4.1, spec §6.3).
 			resp := CreatePaymentResponse{
 				PaymentID:             encodeUUID(p.ID, "pay"),
 				ProviderTransactionID: encodeUUID(p.ProviderTransactionID, "txn"),
@@ -84,7 +82,22 @@ func makeHandleCreatePayment(uc *payment.CreatePaymentUseCase, accountID uuid.UU
 			body, _ := json.Marshal(resp)
 			return http.StatusCreated, body
 		})
-		if err != nil {
+		switch {
+		case err == nil:
+			if result.Replayed {
+				log.Printf("payment %s: idempotent replay (key=%s)", encodeUUID(result.Payment.ID, "pay"), idempotencyKey)
+			} else {
+				log.Printf("payment %s: created (token=%s, status=%s)", encodeUUID(result.Payment.ID, "pay"), req.PaymentToken, string(result.Payment.Status))
+			}
+		case errors.Is(err, payment.ErrIdempotencyKeyReuse):
+			log.Printf("payment: idempotency key reuse (key=%s, token=%s)", idempotencyKey, req.PaymentToken)
+			respondError(w, http.StatusUnprocessableEntity, "idempotency_key_reuse", err.Error())
+			return
+		case errors.Is(err, payment.ErrIdempotencyConflict):
+			log.Printf("payment: idempotency conflict (key=%s still in flight)", idempotencyKey)
+			respondError(w, http.StatusConflict, "idempotency_conflict", err.Error())
+			return
+		default:
 			respondError(w, http.StatusInternalServerError, "internal_error", err.Error())
 			return
 		}
@@ -137,12 +150,13 @@ func handleCreatePayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Placeholder: for now, return 501 to indicate the use case is not wired.
-	http.Error(w, "Not Implemented", http.StatusNotImplemented)
+	// Placeholder: request validated but no use case wired.
+	respondError(w, http.StatusNotImplemented, "internal_error", "not implemented")
 }
 
 // respondError writes a standard error response.
 func respondError(w http.ResponseWriter, status int, code, message string) {
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(ErrorResponse{
 		Code:    code,
