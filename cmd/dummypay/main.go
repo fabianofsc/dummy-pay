@@ -44,8 +44,10 @@ func main() {
 		log.Fatalf("seed account: %v", err)
 	}
 
-	router := buildRouter(cfg, pool, accountID)
-	worker := buildWorker(cfg, pool)
+	a := buildAdapters(cfg, pool)
+
+	router := buildRouter(a, cfg, pool, accountID)
+	worker := buildWorker(a, cfg, pool)
 
 	stopTicker := startWorkerTicker(ctx, worker, cfg.WorkerPollInterval)
 	defer stopTicker()
@@ -67,43 +69,67 @@ func applyMigrations(ctx context.Context, databaseURL string) error {
 	return postgres.Migrate(ctx, sqlDB)
 }
 
-// buildRouter constructs every adapter the HTTP layer needs and wires them
-// into the three use cases the router serves (spec §8, ADR-0003).
-func buildRouter(cfg config.Config, pool *pgxpool.Pool, accountID uuid.UUID) http.Handler {
+// adapters bundles the Postgres and clock adapters the router and the
+// worker both depend on, built once in buildAdapters rather than separately
+// in buildRouter and buildWorker — the two used to reconstruct the same
+// PaymentRepository, SubscriptionRepository, DeliveryRepository, and
+// OutboxWriter independently, risking the two call sites drifting apart.
+type adapters struct {
+	ids           clock.UUIDv7Generator
+	realClock     clock.Real
+	tx            *postgres.TxManager
+	payments      *postgres.PaymentRepository
+	subscriptions *postgres.SubscriptionRepository
+	deliveries    *postgres.DeliveryRepository
+	outbox        *postgres.OutboxWriter
+}
+
+// buildAdapters constructs the adapters shared between buildRouter and
+// buildWorker (spec §8, ADR-0003).
+func buildAdapters(cfg config.Config, pool *pgxpool.Pool) adapters {
 	ids := clock.UUIDv7Generator{}
 	realClock := clock.Real{}
-	tx := postgres.NewTxManager(pool)
-	payments := postgres.NewPaymentRepository(pool)
+	return adapters{
+		ids:           ids,
+		realClock:     realClock,
+		tx:            postgres.NewTxManager(pool),
+		payments:      postgres.NewPaymentRepository(pool),
+		subscriptions: postgres.NewSubscriptionRepository(pool, cfg.WebhookSecretEncKey),
+		deliveries:    postgres.NewDeliveryRepository(pool, ids),
+		outbox:        postgres.NewOutboxWriter(pool, ids, realClock),
+	}
+}
+
+// buildRouter wires a into the three use cases the router serves, plus the
+// idempotency store the router alone needs (spec §8, ADR-0003).
+func buildRouter(a adapters, cfg config.Config, pool *pgxpool.Pool, accountID uuid.UUID) http.Handler {
 	idempotency := postgres.NewIdempotencyStore(pool)
-	outbox := postgres.NewOutboxWriter(pool, ids, realClock)
-	subscriptions := postgres.NewSubscriptionRepository(pool, cfg.WebhookSecretEncKey)
-	deliveries := postgres.NewDeliveryRepository(pool, ids)
 
 	createPayment := payment.NewCreatePaymentUseCase(payment.CreatePaymentDeps{
-		Tx:               tx,
-		Payments:         payments,
+		Tx:               a.tx,
+		Payments:         a.payments,
 		Idempotency:      idempotency,
-		Outbox:           outbox,
-		Subscriptions:    subscriptions,
-		Deliveries:       deliveries,
-		Clock:            realClock,
-		IDs:              ids,
+		Outbox:           a.outbox,
+		Subscriptions:    a.subscriptions,
+		Deliveries:       a.deliveries,
+		Clock:            a.realClock,
+		IDs:              a.ids,
 		ProcessingDelay:  cfg.ProcessingDelay,
 		IdempotencyLease: cfg.IdempotencyLease,
 	})
 
 	createSubscription := payment.NewCreateSubscriptionUseCase(payment.CreateSubscriptionDeps{
-		Subscriptions: subscriptions,
+		Subscriptions: a.subscriptions,
 		Secrets:       webhook.SecretGenerator{},
-		IDs:           ids,
-		Clock:         realClock,
+		IDs:           a.ids,
+		Clock:         a.realClock,
 	})
 
 	retryDelivery := payment.NewRetryDeliveryUseCase(payment.RetryDeliveryDeps{
-		Tx:         tx,
-		Deliveries: deliveries,
-		Outbox:     outbox,
-		Clock:      realClock,
+		Tx:         a.tx,
+		Deliveries: a.deliveries,
+		Outbox:     a.outbox,
+		Clock:      a.realClock,
 	})
 
 	return httpapi.NewProductionRouter(httpapi.ProductionRouterDeps{
@@ -112,28 +138,26 @@ func buildRouter(cfg config.Config, pool *pgxpool.Pool, accountID uuid.UUID) htt
 			AccountKeySecret: cfg.AccountKeySecret,
 		},
 		AccountID:          accountID,
+		Clock:              a.realClock,
 		CreatePayment:      createPayment,
 		CreateSubscription: createSubscription,
 		RetryDelivery:      retryDelivery,
 	})
 }
 
-// buildWorker constructs the Worker with the same adapters the router uses,
-// plus the outbox claimer and outbound sender it alone needs.
-func buildWorker(cfg config.Config, pool *pgxpool.Pool) *payment.Worker {
-	ids := clock.UUIDv7Generator{}
-	realClock := clock.Real{}
-
+// buildWorker wires a into the Worker, plus the outbox claimer and outbound
+// sender it alone needs.
+func buildWorker(a adapters, cfg config.Config, pool *pgxpool.Pool) *payment.Worker {
 	return payment.NewWorker(payment.WorkerDeps{
-		Tx:            postgres.NewTxManager(pool),
+		Tx:            a.tx,
 		Claimer:       postgres.NewOutboxClaimer(pool),
-		Payments:      postgres.NewPaymentRepository(pool),
-		Subscriptions: postgres.NewSubscriptionRepository(pool, cfg.WebhookSecretEncKey),
-		Deliveries:    postgres.NewDeliveryRepository(pool, ids),
-		Outbox:        postgres.NewOutboxWriter(pool, ids, realClock),
+		Payments:      a.payments,
+		Subscriptions: a.subscriptions,
+		Deliveries:    a.deliveries,
+		Outbox:        a.outbox,
 		Sender:        webhook.NewHTTPSender(cfg.WebhookTimeout),
-		IDs:           ids,
-		Clock:         realClock,
+		IDs:           a.ids,
+		Clock:         a.realClock,
 	})
 }
 

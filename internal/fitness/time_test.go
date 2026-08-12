@@ -13,7 +13,6 @@ var allowedTimePackages = map[string]bool{
 	"internal/clock":   true,
 	"cmd":              true,
 	"internal/fitness": true,
-	"internal/http":    true, // request logger middleware (diagnostic, not business logic)
 }
 
 var timeCallPatterns = []struct {

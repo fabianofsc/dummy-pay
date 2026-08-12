@@ -67,10 +67,13 @@ func NewRouter(auth AuthConfig) *chi.Mux {
 // ProductionRouterDeps bundles every dependency the fully wired production
 // router needs (Phase 11 assembly). V1 has exactly one technical account
 // (spec §1 "Technical account"), so AccountID is a single value threaded
-// into every handler rather than derived per-request.
+// into every handler rather than derived per-request. Clock backs the
+// request logger's timing — internal/http never calls time.Now() itself
+// (ADR-0012); the caller (cmd/dummypay) supplies the real clock.
 type ProductionRouterDeps struct {
 	Auth               AuthConfig
 	AccountID          uuid.UUID
+	Clock              payment.Clock
 	CreatePayment      *payment.CreatePaymentUseCase
 	CreateSubscription *payment.CreateSubscriptionUseCase
 	RetryDelivery      *payment.RetryDeliveryUseCase
@@ -82,7 +85,7 @@ type ProductionRouterDeps struct {
 func NewProductionRouter(deps ProductionRouterDeps) *chi.Mux {
 	r := chi.NewRouter()
 
-	r.Use(requestLogger)
+	r.Use(requestLogger(deps.Clock))
 
 	r.Get("/health", handleHealth)
 
@@ -154,11 +157,17 @@ func (r *statusRecorder) WriteHeader(code int) {
 	r.ResponseWriter.WriteHeader(code)
 }
 
-func requestLogger(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
-		next.ServeHTTP(rec, r)
-		log.Printf("%s %s %d %s", r.Method, r.URL.Path, rec.status, time.Since(start).Round(time.Microsecond))
-	})
+// requestLogger returns logging middleware timed from clk rather than
+// time.Now() — internal/http is not one of the packages ADR-0012 permits to
+// read wall-clock time directly, so the caller (cmd/dummypay, which holds
+// the real clock) supplies it.
+func requestLogger(clk payment.Clock) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := clk.Now()
+			rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+			next.ServeHTTP(rec, r)
+			log.Printf("%s %s %d %s", r.Method, r.URL.Path, rec.status, clk.Now().Sub(start).Round(time.Microsecond))
+		})
+	}
 }

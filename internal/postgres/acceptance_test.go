@@ -87,6 +87,7 @@ func newAcceptanceDeps(t *testing.T, now time.Time) acceptanceDeps {
 	router := httpapi.NewProductionRouter(httpapi.ProductionRouterDeps{
 		Auth:               auth,
 		AccountID:          accountID,
+		Clock:              fakeClock,
 		CreatePayment:      createPayment,
 		CreateSubscription: createSubscription,
 		RetryDelivery:      retryDelivery,
