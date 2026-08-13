@@ -18,7 +18,7 @@ test-integration: db-up
 
 lint:
 	go vet ./...
-	go test ./internal/fitness/ -run 'TestDependencyDirection|TestTimeDiscipline|TestAssertionDiscipline|TestSuiteWallClockBudget' -count=1
+	go test ./internal/fitness/ -count=1
 
 suite-budget:
 	@timeout 120s go test ./... -race -count=1 || (echo "suite exceeded wall-clock budget of 120s"; exit 1)
@@ -32,11 +32,10 @@ docker-run:
 docker-stop:
 	docker compose down
 
-# docker-push builds and publishes the fixed latest tag. Run `docker login`
-# before invoking this target.
+# docker-push publishes a multi-architecture manifest for the fixed latest tag.
+# Run `docker login` before invoking this target.
 docker-push:
-	docker build -t $(DOCKER_IMAGE):latest .
-	docker push $(DOCKER_IMAGE):latest
+	docker buildx build --platform linux/amd64,linux/arm64 --push -t $(DOCKER_IMAGE):latest .
 
 # database-only targets (legacy, used by run-local and test-integration)
 db-up:
