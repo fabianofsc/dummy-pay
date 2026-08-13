@@ -84,6 +84,14 @@ type adapters struct {
 	outbox        *postgres.OutboxWriter
 }
 
+// standardLogger adapts the process logger to payment.Logger. It is wired
+// only here so internal/payment stays independent from infrastructure.
+type standardLogger struct{}
+
+func (standardLogger) Printf(format string, args ...any) {
+	log.Printf(format, args...)
+}
+
 // buildAdapters constructs the adapters shared between buildRouter and
 // buildWorker (spec §8, ADR-0003).
 func buildAdapters(cfg config.Config, pool *pgxpool.Pool) adapters {
@@ -156,6 +164,7 @@ func buildWorker(a adapters, cfg config.Config, pool *pgxpool.Pool) *payment.Wor
 		Deliveries:    a.deliveries,
 		Outbox:        a.outbox,
 		Sender:        webhook.NewHTTPSender(cfg.WebhookTimeout),
+		Logger:        standardLogger{},
 		IDs:           a.ids,
 		Clock:         a.realClock,
 	})

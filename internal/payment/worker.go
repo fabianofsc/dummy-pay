@@ -17,6 +17,7 @@ type WorkerDeps struct {
 	Deliveries    DeliveryRepository
 	Outbox        OutboxWriter
 	Sender        Sender
+	Logger        Logger
 	IDs           IDGenerator
 	Clock         Clock
 }
@@ -30,8 +31,15 @@ type Worker struct {
 	deps WorkerDeps
 }
 
+type discardLogger struct{}
+
+func (discardLogger) Printf(string, ...any) {}
+
 // NewWorker constructs a Worker against deps.
 func NewWorker(deps WorkerDeps) *Worker {
+	if deps.Logger == nil {
+		deps.Logger = discardLogger{}
+	}
 	return &Worker{deps: deps}
 }
 
@@ -87,6 +95,7 @@ func (w *Worker) settlePayment(ctx context.Context, paymentID uuid.UUID, now tim
 		if err := w.deps.Payments.Update(ctx, p); err != nil {
 			return fmt.Errorf("update payment: %w", err)
 		}
+		w.deps.Logger.Printf("payment settled payment_id=%s token=%s status=%s", p.ID, p.Token, p.Status)
 
 		sub, active, err := w.deps.Subscriptions.LoadActive(ctx, p.AccountID)
 		if err != nil {
@@ -145,6 +154,10 @@ func (w *Worker) deliverWebhook(ctx context.Context, deliveryID uuid.UUID, now t
 	if err := w.deps.Deliveries.RecordAttempt(ctx, deliveryID, status, httpStatus, now); err != nil {
 		return fmt.Errorf("record delivery attempt: %w", err)
 	}
+	w.deps.Logger.Printf(
+		"webhook delivery delivery_id=%s payment_id=%s event_type=%s status=%s http_status=%d transport_error=%t",
+		d.ID, d.PaymentID, d.EventType, status, httpStatus, sendErr != nil,
+	)
 
 	return nil
 }

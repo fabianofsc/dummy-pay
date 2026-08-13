@@ -15,6 +15,13 @@ type Clock interface {
 	Now() time.Time
 }
 
+// Logger records operational events without coupling the domain to a logging
+// package or infrastructure adapter. Messages must never include card data,
+// webhook payloads, secrets, signatures, headers, or callback URLs.
+type Logger interface {
+	Printf(format string, args ...any)
+}
+
 // IDGenerator produces unique, time-ordered identifiers (ADR-0006).
 type IDGenerator interface {
 	NewID() uuid.UUID
