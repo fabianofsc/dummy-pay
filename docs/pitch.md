@@ -1,122 +1,132 @@
-# DummyPay — Pitch
+# DummyPay — Apresentação
 
-> A card payment provider that isn't real, on purpose.
+> Um provedor de pagamentos com cartão que não é real, de propósito.
 
-## The problem
+## O problema
 
-Every team that takes card payments has to write the same code: build a charge
-request, handle an approval, handle a decline, survive a timeout, reconcile a
-webhook that arrives late, and never charge the customer twice. That code is
-some of the highest-consequence code in the product.
+Toda equipe que recebe pagamentos com cartão precisa escrever o mesmo código:
+montar uma requisição de cobrança, lidar com uma aprovação, lidar com uma
+recusa, sobreviver a um timeout, reconciliar um webhook que chega atrasado e
+nunca cobrar o cliente duas vezes. Esse código está entre os de maior impacto
+no produto.
 
-It is also some of the hardest code to test.
+Também está entre os mais difíceis de testar.
 
-The usual options all leak:
+As opções usuais sempre deixam alguma lacuna:
 
-- **Provider sandboxes** are shared, remote, and occasionally down. A test suite
-  that depends on one is a test suite that fails for reasons that have nothing
-  to do with your change. CI needs network access and real credentials on disk.
-- **Mocked HTTP clients** test that you can parse a response you wrote yourself.
-  They never exercise idempotency keys, retries, concurrent requests to the same
-  order, or a webhook that shows up before your database transaction commits.
-- **The "we'll test it in staging" plan** means the first real exercise of your
-  decline path is a customer hitting it.
+- **Sandboxes de provedores** são compartilhados, remotos e ocasionalmente ficam
+  indisponíveis. Uma suíte que depende deles falha por motivos que não têm nada
+  a ver com sua mudança. A CI precisa de acesso à rede e de credenciais reais
+  armazenadas.
+- **Clientes HTTP simulados** testam se você consegue interpretar uma resposta
+  que você mesmo escreveu. Eles não exercitam chaves de idempotência, retries,
+  requisições concorrentes para o mesmo pedido ou um webhook que chega antes de
+  a transação do seu banco ser confirmada.
+- **O plano de “testar em staging”** faz com que o primeiro exercício real do
+  caminho de recusa aconteça quando um cliente o aciona.
 
-The result is predictable. Approval and decline get tested. Everything else —
-the asynchronous path, the duplicate request, the webhook that failed and needs
-replaying — gets discovered in production.
+O resultado é previsível. Aprovação e recusa são testadas. Todo o restante — o
+caminho assíncrono, a requisição duplicada, o webhook que falhou e precisa ser
+reenviado — é descoberto em produção.
 
-## What DummyPay is
+## O que é o DummyPay
 
-DummyPay is a payment service provider you run yourself. It speaks a small,
-honest HTTP API, keeps its own PostgreSQL database, and behaves like a real PSP
-in exactly the ways that make integration code hard to get right.
+O DummyPay é um provedor de serviços de pagamento que você executa por conta
+própria. Ele expõe uma API HTTP pequena e transparente, mantém seu próprio
+banco PostgreSQL e se comporta como um PSP real exatamente nas formas que
+tornam o código de integração difícil de acertar.
 
-You point your checkout at it instead of a real provider, and you get:
+Você aponta seu checkout para ele, em vez de um provedor real, e obtém:
 
-**Deterministic scenarios instead of test cards.** You don't send a card number,
-because DummyPay never wants one. You send an opaque scenario token —
-`card_approved`, `card_declined`, `card_processing_approved`,
-`card_processing_declined` — and the outcome is exactly what the name says,
-every single time. No test-card tables, no "this number stopped working last
-quarter."
+**Cenários determinísticos em vez de cartões de teste.** Você não envia um
+número de cartão, porque o DummyPay nunca quer recebê-lo. Você envia um token
+de cenário opaco — `card_approved`, `card_declined`,
+`card_processing_approved`, `card_processing_declined` — e o resultado é
+exatamente o que o nome informa, sempre. Sem tabelas de cartões de teste, sem
+“este número deixou de funcionar no trimestre passado”.
 
-**A real asynchronous path.** Two of the four scenarios return `PROCESSING`
-first and settle later. That is the path most integrations get wrong, and it is
-usually the one that's hardest to trigger on demand. Here it's a token. The
-settlement delay is configured per environment: a few seconds locally so you can
-watch it happen, zero in tests so the suite stays fast and deterministic.
+**Um caminho assíncrono real.** Os quatro cenários retornam `PROCESSING`
+primeiro e liquidam depois. Esse é o caminho que mais costuma dar errado nas
+integrações, e geralmente o mais difícil de disparar sob demanda. Aqui ele é
+controlado por um token. O atraso de liquidação é configurado por ambiente:
+alguns segundos localmente para que você possa observá-lo, zero nos testes para
+que a suíte permaneça rápida e determinística.
 
-**Idempotency and concurrency that actually push back.** Replaying an
-`Idempotency-Key` returns the original transaction. Reusing a key with a
-different body does not quietly create a second charge. Firing two concurrent
-requests with the same key while the first is still in flight gets you a `409`,
-not a race. These are the semantics real providers enforce, and the only way to
-know your client handles them is to run against something that enforces them.
+**Idempotência e concorrência que realmente se impõem.** Repetir uma
+`Idempotency-Key` devolve a transação original. Reutilizar uma chave com corpo
+diferente não cria silenciosamente uma segunda cobrança. Enviar duas requisições
+concorrentes com a mesma chave enquanto a primeira ainda está em andamento
+retorna `409`, não uma corrida. Essa é a semântica que provedores reais impõem,
+e a única maneira de saber se seu cliente a trata corretamente é executá-lo
+contra algo que a faça cumprir.
 
-**Webhooks you can break and repair.** Subscriptions are registered up front,
-not attached to individual payments — the way real providers do it. Every
-delivery is persisted *before* it is attempted, carries an HMAC-SHA-256
-signature over the raw body, and records its own status, attempt count, last
-attempt time, and last HTTP status. When your consumer is down, the delivery is
-`FAILED` and sitting in a table where you can see it. When it comes back, you
-replay it with one call. Signature verification is something you can now write a
-real test for.
+**Webhooks que você pode quebrar e reparar.** As assinaturas são registradas
+antecipadamente, não vinculadas a pagamentos individuais — como provedores reais
+fazem. Toda entrega é persistida *antes* da tentativa, carrega uma assinatura
+HMAC-SHA-256 sobre o corpo bruto e registra seu próprio status, contagem de
+tentativas, horário da última tentativa e último status HTTP. Quando seu
+consumidor está indisponível, a entrega fica `FAILED` em uma tabela onde você
+pode vê-la. Quando ele volta, você a reenvia com uma chamada. A verificação de
+assinatura é algo para o qual agora você pode escrever um teste real.
 
-Delivery order is not guaranteed, deliberately. Real providers don't guarantee
-it either, and a consumer that quietly depends on ordering is exactly the kind
-of bug worth finding on a laptop rather than in production.
+A ordem de entrega não é garantida, deliberadamente. Provedores reais também
+não a garantem, e um consumidor que depende silenciosamente de ordenação é
+exatamente o tipo de erro que vale a pena encontrar no notebook, em vez de em
+produção.
 
-**Nothing sensitive, ever.** DummyPay does not accept a PAN, a CVV, or an expiry
-date. There is no field to put them in. It cannot leak cardholder data because
-it never has any — which means it can run on a laptop, in CI, in a shared dev
-environment, or in a demo, without a compliance conversation.
+**Nada sensível, nunca.** O DummyPay não aceita PAN, CVV ou data de expiração.
+Não há campo onde colocá-los. Ele não pode vazar dados de portador porque nunca
+os possui — portanto pode ser executado em um notebook, na CI, em um ambiente
+de desenvolvimento compartilhado ou em uma demonstração, sem uma conversa sobre
+conformidade.
 
-## What it is not
+## O que ele não é
 
-DummyPay is not a payment processor, and it is not pretending to be one. It
-moves no money and touches no card network. It is not a PCI-compliant system,
-because it deliberately places itself outside the scope that PCI describes.
+O DummyPay não é um processador de pagamentos, nem finge ser um. Ele não move
+dinheiro nem toca uma rede de cartões. Não é um sistema compatível com PCI,
+porque deliberadamente se coloca fora do escopo descrito pela PCI.
 
-It is also intentionally small. No tokenization or card vault. No auth-only,
-pre-authorization, or later/partial capture. No refunds, chargebacks, 3DS,
-installments, anti-fraud, split payments, subscriptions, Pix, or boleto. No
-multi-tenancy, no dashboard, no public API. One technical account per
-environment, one active webhook subscription, one operation: sell.
+Também é intencionalmente pequeno. Não há tokenização nem cofre de cartões. Não
+há auth-only, pré-autorização ou captura posterior/parcial. Não há reembolsos,
+chargebacks, 3DS, parcelamentos, antifraude, split payments, assinaturas, Pix ou
+boleto. Não há multitenancy, dashboard ou API pública. Uma conta técnica por
+ambiente, uma assinatura de webhook ativa, uma operação: vender.
 
-Every one of those omissions is a decision, not a gap. The value of this project
-is that the surface stays small enough to trust.
+Cada uma dessas ausências é uma decisão, não uma lacuna. O valor deste projeto
+é que sua superfície permaneça pequena o bastante para inspirar confiança.
 
-## Who it's for
+## Para quem é
 
-Backend teams building or maintaining a checkout, who want their payment
-integration covered by tests that run offline and pass for the right reasons.
+Equipes de backend que estão construindo ou mantendo um checkout e querem sua
+integração de pagamentos coberta por testes que executam offline e passam pelas
+razões certas.
 
-## How it's built
+## Como é construído
 
-Go, with its own PostgreSQL and no other dependency. Three endpoints behind
-`chi`, a domain package that imports no infrastructure, and asynchronous work —
-delayed settlement and webhook delivery alike — carried by an outbox table
-written in the same transaction as the change that produced it. Nothing is ever
-sent that wasn't first recorded.
+Go, com seu próprio PostgreSQL e nenhuma outra dependência. Três endpoints por
+trás de `chi`, um pacote de domínio que não importa infraestrutura e trabalho
+assíncrono — tanto a liquidação atrasada quanto a entrega de webhook — em uma
+tabela outbox escrita na mesma transação que produziu a mudança. Nada é enviado
+sem antes ter sido registrado.
 
-The two properties everything else serves: **the semantics under test are the
-semantics shipped** — idempotency and worker claiming are proved against a real
-PostgreSQL, never a fake that would agree with whatever we wrote — and **no test
-waits on the clock**, because time is injected and schedule is data.
+As duas propriedades às quais todo o resto serve: **a semântica sob teste é a
+semântica entregue** — idempotência e a reivindicação de trabalho do worker são
+comprovadas em PostgreSQL real, nunca em um fake que concordaria com qualquer
+coisa que escrevêssemos — e **nenhum teste espera pelo relógio**, porque o tempo
+é injetado e a agenda é dado.
 
-Each choice, including the ones that were close and what they cost, is recorded
-in [decisions/](decisions/).
+Cada escolha, inclusive as que foram próximas e seus custos, está registrada em
+[decisions/](decisions/).
 
-## What "done" looks like for V1
+## Como é “pronto” na V1
 
-The service starts and the full test suite passes with no external network. The
-suite covers approval, decline, both asynchronous scenarios, idempotent replay,
-concurrent duplicate requests, HMAC signature generation, webhook delivery
-failure, and successful replay. A developer can clone the repository and have it
-running locally by following the README.
+O serviço inicia e a suíte completa de testes passa sem rede externa. A suíte
+cobre aprovação, recusa, os cenários assíncronos, replay idempotente,
+requisições duplicadas concorrentes, geração da assinatura HMAC, falha na
+entrega do webhook e replay bem-sucedido. Uma pessoa desenvolvedora pode clonar
+o repositório e executá-lo localmente seguindo o README.
 
 ---
 
-See the [README](../README.md) for the API contract and local setup, and
-[decisions/](decisions/) for the architecture decision records.
+Consulte o [README](../README.md) para o contrato da API e a configuração local,
+e [decisions/](decisions/) para os registros de decisões arquiteturais.

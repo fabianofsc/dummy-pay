@@ -6,7 +6,7 @@ meta:
   created: 1700000000000
   modified: 1700000000000
 collection:
-  - name: Health
+  - name: Saúde
     meta:
       id: fld_health
       created: 1700000000000
@@ -25,9 +25,9 @@ collection:
         scripts:
           afterResponse: |-
             insomnia.test('status 200', () => insomnia.response.to.have.status(200));
-            insomnia.test('body is JSON', () => insomnia.response.to.be.json);
+            insomnia.test('corpo é JSON', () => insomnia.response.to.be.json);
             const body = insomnia.response.json();
-            insomnia.test('status is ok', () => insomnia.expect(body.status).to.eql('ok'));
+            insomnia.test('status é ok', () => insomnia.expect(body.status).to.eql('ok'));
         settings:
           renderRequestBody: true
           encodeUrl: true
@@ -36,7 +36,7 @@ collection:
             send: true
             store: true
           rebuildPath: true
-  - name: Payments
+  - name: Pagamentos
     meta:
       id: fld_payments
       created: 1700000000000
@@ -69,11 +69,11 @@ collection:
           afterResponse: |-
             insomnia.test('status 201', () => insomnia.response.to.have.status(201));
             const body = insomnia.response.json();
-            insomnia.test('pay_ prefix', () => insomnia.expect(body.payment_id).to.match(/^pay_/));
-            insomnia.test('txn_ prefix', () => insomnia.expect(body.provider_transaction_id).to.match(/^txn_/));
-            insomnia.test('status PROCESSING', () => insomnia.expect(body.status).to.eql('PROCESSING'));
-            insomnia.test('amount correct', () => insomnia.expect(body.amount).to.eql(10990));
-            insomnia.test('has created_at', () => insomnia.expect(body.created_at).to.be.a('string'));
+            insomnia.test('prefixo pay_', () => insomnia.expect(body.payment_id).to.match(/^pay_/));
+            insomnia.test('prefixo txn_', () => insomnia.expect(body.provider_transaction_id).to.match(/^txn_/));
+            insomnia.test('status é PROCESSING', () => insomnia.expect(body.status).to.eql('PROCESSING'));
+            insomnia.test('valor correto', () => insomnia.expect(body.amount).to.eql(10990));
+            insomnia.test('possui created_at', () => insomnia.expect(body.created_at).to.be.a('string'));
             insomnia.environment.set('payment_id', body.payment_id);
         settings:
           renderRequestBody: true
@@ -109,7 +109,7 @@ collection:
           afterResponse: |-
             insomnia.test('status 201', () => insomnia.response.to.have.status(201));
             const body = insomnia.response.json();
-            insomnia.test('status PROCESSING', () => insomnia.expect(body.status).to.eql('PROCESSING'));
+            insomnia.test('status é PROCESSING', () => insomnia.expect(body.status).to.eql('PROCESSING'));
         settings:
           renderRequestBody: true
           encodeUrl: true
@@ -144,7 +144,7 @@ collection:
           afterResponse: |-
             insomnia.test('status 201', () => insomnia.response.to.have.status(201));
             const body = insomnia.response.json();
-            insomnia.test('status PROCESSING', () => insomnia.expect(body.status).to.eql('PROCESSING'));
+            insomnia.test('status é PROCESSING', () => insomnia.expect(body.status).to.eql('PROCESSING'));
         settings:
           renderRequestBody: true
           encodeUrl: true
@@ -179,7 +179,7 @@ collection:
           afterResponse: |-
             insomnia.test('status 201', () => insomnia.response.to.have.status(201));
             const body = insomnia.response.json();
-            insomnia.test('status PROCESSING', () => insomnia.expect(body.status).to.eql('PROCESSING'));
+            insomnia.test('status é PROCESSING', () => insomnia.expect(body.status).to.eql('PROCESSING'));
         settings:
           renderRequestBody: true
           encodeUrl: true
@@ -189,7 +189,7 @@ collection:
             store: true
           rebuildPath: true
       - url: "{{ _.base_url }}/v1/payments"
-        name: "5. Idempotent replay → 201"
+        name: "5. Replay idempotente → 201"
         meta:
           id: req_pay_replay
           created: 1700000000000
@@ -215,8 +215,8 @@ collection:
             insomnia.test('status 201', () => insomnia.response.to.have.status(201));
             const body = insomnia.response.json();
             const savedId = insomnia.environment.get('payment_id');
-            insomnia.test('same payment_id as #1', () => insomnia.expect(body.payment_id).to.eql(savedId));
-            insomnia.test('status PROCESSING', () => insomnia.expect(body.status).to.eql('PROCESSING'));
+            insomnia.test('mesmo payment_id do item 1', () => insomnia.expect(body.payment_id).to.eql(savedId));
+            insomnia.test('status é PROCESSING', () => insomnia.expect(body.status).to.eql('PROCESSING'));
         settings:
           renderRequestBody: true
           encodeUrl: true
@@ -226,7 +226,7 @@ collection:
             store: true
           rebuildPath: true
       - url: "{{ _.base_url }}/v1/payments"
-        name: "6. Key reuse → 422"
+        name: "6. Reutilização de chave → 422"
         meta:
           id: req_pay_reuse
           created: 1700000000000
@@ -251,7 +251,7 @@ collection:
           afterResponse: |-
             insomnia.test('status 422', () => insomnia.response.to.have.status(422));
             const body = insomnia.response.json();
-            insomnia.test('code idempotency_key_reuse', () => insomnia.expect(body.code).to.eql('idempotency_key_reuse'));
+            insomnia.test('código idempotency_key_reuse', () => insomnia.expect(body.code).to.eql('idempotency_key_reuse'));
         settings:
           renderRequestBody: true
           encodeUrl: true
@@ -260,7 +260,7 @@ collection:
             send: true
             store: true
           rebuildPath: true
-  - name: Payments - Errors
+  - name: Pagamentos - Erros
     meta:
       id: fld_payments_err
       created: 1700000000000
@@ -268,7 +268,7 @@ collection:
       sortKey: 2
     children:
       - url: "{{ _.base_url }}/v1/payments"
-        name: "No auth → 401"
+        name: "Sem autenticação → 401"
         meta:
           id: req_pay_no_auth
           created: 1700000000000
@@ -288,9 +288,9 @@ collection:
         scripts:
           afterResponse: |-
             insomnia.test('status 401', () => insomnia.response.to.have.status(401));
-            insomnia.test('Content-Type is JSON', () => insomnia.expect(insomnia.response.headers.get('Content-Type')).to.match(/application\/json/));
+            insomnia.test('Content-Type é JSON', () => insomnia.expect(insomnia.response.headers.get('Content-Type')).to.match(/application\/json/));
             const body = insomnia.response.json();
-            insomnia.test('code unauthorized', () => insomnia.expect(body.code).to.eql('unauthorized'));
+            insomnia.test('código unauthorized', () => insomnia.expect(body.code).to.eql('unauthorized'));
         settings:
           renderRequestBody: true
           encodeUrl: true
@@ -300,7 +300,7 @@ collection:
             store: true
           rebuildPath: true
       - url: "{{ _.base_url }}/v1/payments"
-        name: "Missing Idempotency-Key → 400"
+        name: "Idempotency-Key ausente → 400"
         meta:
           id: req_pay_no_idem
           created: 1700000000000
@@ -323,7 +323,7 @@ collection:
           afterResponse: |-
             insomnia.test('status 400', () => insomnia.response.to.have.status(400));
             const body = insomnia.response.json();
-            insomnia.test('code invalid_request', () => insomnia.expect(body.code).to.eql('invalid_request'));
+            insomnia.test('código invalid_request', () => insomnia.expect(body.code).to.eql('invalid_request'));
         settings:
           renderRequestBody: true
           encodeUrl: true
@@ -358,7 +358,7 @@ collection:
           afterResponse: |-
             insomnia.test('status 400', () => insomnia.response.to.have.status(400));
             const body = insomnia.response.json();
-            insomnia.test('code invalid_request', () => insomnia.expect(body.code).to.eql('invalid_request'));
+            insomnia.test('código invalid_request', () => insomnia.expect(body.code).to.eql('invalid_request'));
         settings:
           renderRequestBody: true
           encodeUrl: true
@@ -368,7 +368,7 @@ collection:
             store: true
           rebuildPath: true
       - url: "{{ _.base_url }}/v1/payments"
-        name: "Amount zero → 422"
+        name: "Valor zero → 422"
         meta:
           id: req_pay_zero
           created: 1700000000000
@@ -393,7 +393,7 @@ collection:
           afterResponse: |-
             insomnia.test('status 422', () => insomnia.response.to.have.status(422));
             const body = insomnia.response.json();
-            insomnia.test('code invalid_amount', () => insomnia.expect(body.code).to.eql('invalid_amount'));
+            insomnia.test('código invalid_amount', () => insomnia.expect(body.code).to.eql('invalid_amount'));
         settings:
           renderRequestBody: true
           encodeUrl: true
@@ -403,7 +403,7 @@ collection:
             store: true
           rebuildPath: true
       - url: "{{ _.base_url }}/v1/payments"
-        name: "Amount negative → 422"
+        name: "Valor negativo → 422"
         meta:
           id: req_pay_neg
           created: 1700000000000
@@ -428,7 +428,7 @@ collection:
           afterResponse: |-
             insomnia.test('status 422', () => insomnia.response.to.have.status(422));
             const body = insomnia.response.json();
-            insomnia.test('code invalid_amount', () => insomnia.expect(body.code).to.eql('invalid_amount'));
+            insomnia.test('código invalid_amount', () => insomnia.expect(body.code).to.eql('invalid_amount'));
         settings:
           renderRequestBody: true
           encodeUrl: true
@@ -438,7 +438,7 @@ collection:
             store: true
           rebuildPath: true
       - url: "{{ _.base_url }}/v1/payments"
-        name: "Currency USD → 422"
+        name: "Moeda USD → 422"
         meta:
           id: req_pay_usd
           created: 1700000000000
@@ -463,7 +463,7 @@ collection:
           afterResponse: |-
             insomnia.test('status 422', () => insomnia.response.to.have.status(422));
             const body = insomnia.response.json();
-            insomnia.test('code unsupported_currency', () => insomnia.expect(body.code).to.eql('unsupported_currency'));
+            insomnia.test('código unsupported_currency', () => insomnia.expect(body.code).to.eql('unsupported_currency'));
         settings:
           renderRequestBody: true
           encodeUrl: true
@@ -473,7 +473,7 @@ collection:
             store: true
           rebuildPath: true
       - url: "{{ _.base_url }}/v1/payments"
-        name: "Unknown token → 422"
+        name: "Token desconhecido → 422"
         meta:
           id: req_pay_bad_token
           created: 1700000000000
@@ -498,7 +498,7 @@ collection:
           afterResponse: |-
             insomnia.test('status 422', () => insomnia.response.to.have.status(422));
             const body = insomnia.response.json();
-            insomnia.test('code unknown_payment_token', () => insomnia.expect(body.code).to.eql('unknown_payment_token'));
+            insomnia.test('código unknown_payment_token', () => insomnia.expect(body.code).to.eql('unknown_payment_token'));
         settings:
           renderRequestBody: true
           encodeUrl: true
@@ -508,7 +508,7 @@ collection:
             store: true
           rebuildPath: true
       - url: "{{ _.base_url }}/v1/payments"
-        name: "Malformed JSON → 400"
+        name: "JSON malformado → 400"
         meta:
           id: req_pay_malformed
           created: 1700000000000
@@ -532,7 +532,7 @@ collection:
           afterResponse: |-
             insomnia.test('status 400', () => insomnia.response.to.have.status(400));
             const body = insomnia.response.json();
-            insomnia.test('code invalid_request', () => insomnia.expect(body.code).to.eql('invalid_request'));
+            insomnia.test('código invalid_request', () => insomnia.expect(body.code).to.eql('invalid_request'));
         settings:
           renderRequestBody: true
           encodeUrl: true
@@ -541,7 +541,7 @@ collection:
             send: true
             store: true
           rebuildPath: true
-  - name: Webhook Subscriptions
+  - name: Assinaturas de webhook
     meta:
       id: fld_subscriptions
       created: 1700000000000
@@ -549,7 +549,7 @@ collection:
       sortKey: 3
     children:
       - url: "{{ _.base_url }}/v1/webhook-subscriptions"
-        name: "Create → 201"
+        name: "Criar → 201"
         meta:
           id: req_sub_create
           created: 1700000000000
@@ -572,9 +572,9 @@ collection:
           afterResponse: |-
             insomnia.test('status 201', () => insomnia.response.to.have.status(201));
             const body = insomnia.response.json();
-            insomnia.test('sub_ prefix', () => insomnia.expect(body.subscription_id).to.match(/^sub_/));
-            insomnia.test('secret whsec_ prefix', () => insomnia.expect(body.secret).to.match(/^whsec_/));
-            insomnia.test('has events', () => insomnia.expect(body.events).to.have.lengthOf(3));
+            insomnia.test('prefixo sub_', () => insomnia.expect(body.subscription_id).to.match(/^sub_/));
+            insomnia.test('prefixo whsec_ no secret', () => insomnia.expect(body.secret).to.match(/^whsec_/));
+            insomnia.test('possui eventos', () => insomnia.expect(body.events).to.have.lengthOf(3));
         settings:
           renderRequestBody: true
           encodeUrl: true
@@ -584,7 +584,7 @@ collection:
             store: true
           rebuildPath: true
       - url: "{{ _.base_url }}/v1/webhook-subscriptions"
-        name: "Duplicate → 409"
+        name: "Duplicada → 409"
         meta:
           id: req_sub_dup
           created: 1700000000000
@@ -607,7 +607,7 @@ collection:
           afterResponse: |-
             insomnia.test('status 409', () => insomnia.response.to.have.status(409));
             const body = insomnia.response.json();
-            insomnia.test('code subscription_exists', () => insomnia.expect(body.code).to.eql('subscription_exists'));
+            insomnia.test('código subscription_exists', () => insomnia.expect(body.code).to.eql('subscription_exists'));
         settings:
           renderRequestBody: true
           encodeUrl: true
@@ -617,7 +617,7 @@ collection:
             store: true
           rebuildPath: true
       - url: "{{ _.base_url }}/v1/webhook-subscriptions"
-        name: "Invalid URL → 422"
+        name: "URL inválida → 422"
         meta:
           id: req_sub_bad_url
           created: 1700000000000
@@ -648,7 +648,7 @@ collection:
             store: true
           rebuildPath: true
       - url: "{{ _.base_url }}/v1/webhook-subscriptions"
-        name: "Unknown event → 422"
+        name: "Evento desconhecido → 422"
         meta:
           id: req_sub_bad_event
           created: 1700000000000
@@ -678,7 +678,7 @@ collection:
             send: true
             store: true
           rebuildPath: true
-  - name: Webhook Retry
+  - name: Retry de webhook
     meta:
       id: fld_retry
       created: 1700000000000
@@ -686,7 +686,7 @@ collection:
       sortKey: 4
     children:
       - url: "{{ _.base_url }}/v1/webhook-deliveries/dlv_00000000-0000-0000-0000-000000000000/retry"
-        name: "Unknown → 404"
+        name: "Desconhecida → 404"
         meta:
           id: req_retry_404
           created: 1700000000000
@@ -702,7 +702,7 @@ collection:
           afterResponse: |-
             insomnia.test('status 404', () => insomnia.response.to.have.status(404));
             const body = insomnia.response.json();
-            insomnia.test('code not_found', () => insomnia.expect(body.code).to.eql('not_found'));
+            insomnia.test('código not_found', () => insomnia.expect(body.code).to.eql('not_found'));
         settings:
           renderRequestBody: true
           encodeUrl: true
@@ -712,7 +712,7 @@ collection:
             store: true
           rebuildPath: true
       - url: "{{ _.base_url }}/v1/webhook-deliveries/pay_00000000-0000-0000-0000-000000000000/retry"
-        name: "Wrong prefix → 404"
+        name: "Prefixo incorreto → 404"
         meta:
           id: req_retry_prefix
           created: 1700000000000
@@ -736,13 +736,13 @@ collection:
             store: true
           rebuildPath: true
 cookieJar:
-  name: Default Jar
+  name: Cookies padrão
   meta:
     id: jar_default
     created: 1700000000000
     modified: 1700000000000
 environments:
-  name: Base Environment
+  name: Ambiente base
   meta:
     id: env_base
     created: 1700000000000
