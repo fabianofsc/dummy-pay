@@ -1,4 +1,6 @@
-.PHONY: run test test-integration lint db-up db-down docker-run docker-stop
+.PHONY: run test test-integration lint db-up db-down docker-run docker-stop docker-push
+
+DOCKER_IMAGE ?= fabianofsc/dummy-pay
 
 # run starts postgres and dummypay via docker compose — only Docker required.
 # No Go, no .env, no manual setup: clone, make run, smoke-test.
@@ -29,6 +31,12 @@ docker-run:
 
 docker-stop:
 	docker compose down
+
+# docker-push builds and publishes the fixed latest tag. Run `docker login`
+# before invoking this target.
+docker-push:
+	docker build -t $(DOCKER_IMAGE):latest .
+	docker push $(DOCKER_IMAGE):latest
 
 # database-only targets (legacy, used by run-local and test-integration)
 db-up:
