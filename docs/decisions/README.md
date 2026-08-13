@@ -17,13 +17,14 @@ down.
 | [0005](adr-0005-chi-http-router.md) | Use chi for HTTP routing | Accepted |
 | [0006](adr-0006-uuidv7-identifiers.md) | Use UUIDv7 identifiers, prefixed at the API boundary | Accepted |
 | [0007](adr-0007-idempotency-unique-constraint.md) | Implement idempotency with a unique constraint and explicit in-flight state | Accepted |
-| [0008](adr-0008-outbox-in-process-worker.md) | Run asynchronous work from an outbox table with an in-process worker | Accepted |
+| [0008](adr-0008-outbox-in-process-worker.md) | Run asynchronous work from an outbox table with an in-process worker | Superseded by ADR-0015 |
 | [0009](adr-0009-webhook-secret-encryption.md) | Encrypt webhook secrets with AES-256-GCM under a separate environment key | Accepted |
 | [0010](adr-0010-configuration-from-environment.md) | Take all configuration from the environment | Accepted |
 | [0011](adr-0011-embedded-goose-migrations.md) | Version the schema with goose migrations embedded in the binary | Accepted |
 | [0012](adr-0012-injected-clock-scheduler.md) | Inject the clock and express scheduling as data | Accepted |
 | [0013](adr-0013-integration-tests-real-postgres.md) | Test against a real PostgreSQL from docker compose, one schema per test | Accepted |
 | [0014](adr-0014-testify-require-and-go-cmp.md) | Assert with testify/require and compare structs with go-cmp | Accepted |
+| [0015](adr-0015-all-payments-start-processing.md) | Start every payment in PROCESSING and settle through the outbox | Accepted |
 
 ## Writing a new one
 

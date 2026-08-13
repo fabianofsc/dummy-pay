@@ -53,7 +53,7 @@ curl -s http://localhost:8080/health | jq .
 
 ## 2. Payments — happy paths
 
-### 2.1 `card_approved` → APPROVED
+### 2.1 `card_approved` → PROCESSING → APPROVED webhook
 
 ```sh
 curl -s -X POST http://localhost:8080/v1/payments \
@@ -62,9 +62,9 @@ curl -s -X POST http://localhost:8080/v1/payments \
   -H "Idempotency-Key: smoke-approved-1" \
   -d '{"reference_id":"smoke:approved","amount":10990,"currency":"BRL","payment_token":"card_approved"}' | jq .
 ```
-**Expect:** `201` — `status: "APPROVED"`
+**Expect:** `201` — `status: "PROCESSING"` *(settles to APPROVED after ~3s and emits the terminal webhook)*
 
-### 2.2 `card_declined` → REJECTED
+### 2.2 `card_declined` → PROCESSING → REJECTED webhook
 
 ```sh
 curl -s -X POST http://localhost:8080/v1/payments \
@@ -73,9 +73,9 @@ curl -s -X POST http://localhost:8080/v1/payments \
   -H "Idempotency-Key: smoke-declined-1" \
   -d '{"reference_id":"smoke:declined","amount":5000,"currency":"BRL","payment_token":"card_declined"}' | jq .
 ```
-**Expect:** `201` — `status: "REJECTED"`
+**Expect:** `201` — `status: "PROCESSING"` *(settles to REJECTED after ~3s and emits the terminal webhook)*
 
-### 2.3 `card_processing_approved` → PROCESSING
+### 2.3 `card_processing_approved` → PROCESSING → APPROVED webhook
 
 ```sh
 curl -s -X POST http://localhost:8080/v1/payments \
@@ -86,7 +86,7 @@ curl -s -X POST http://localhost:8080/v1/payments \
 ```
 **Expect:** `201` — `status: "PROCESSING"` *(settles to APPROVED after ~3s)*
 
-### 2.4 `card_processing_declined` → PROCESSING
+### 2.4 `card_processing_declined` → PROCESSING → REJECTED webhook
 
 ```sh
 curl -s -X POST http://localhost:8080/v1/payments \

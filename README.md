@@ -36,15 +36,16 @@ single call. There is no separate capture step.
 The outcome of a payment is chosen by the caller through an opaque **scenario
 token**, so every test is reproducible:
 
-| Token                       | Behaviour                          |
-| --------------------------- | ---------------------------------- |
-| `card_approved`             | `APPROVED` immediately             |
-| `card_declined`             | `REJECTED` immediately             |
-| `card_processing_approved`  | `PROCESSING`, then `APPROVED`      |
-| `card_processing_declined`  | `PROCESSING`, then `REJECTED`      |
+| Token                       | Behaviour                     |
+| --------------------------- | ----------------------------- |
+| `card_approved`             | `PROCESSING`, then `APPROVED` |
+| `card_declined`             | `PROCESSING`, then `REJECTED` |
+| `card_processing_approved`  | `PROCESSING`, then `APPROVED` |
+| `card_processing_declined`  | `PROCESSING`, then `REJECTED` |
 
-The delay before a `PROCESSING` payment settles is configured per environment
-and is zero (or driven by a controllable clock) in tests.
+Every payment returns `PROCESSING` first. The terminal status is delivered by a
+webhook after settlement; the delay is configured per environment and is zero
+(or driven by a controllable clock) in tests.
 
 ## Core concepts
 

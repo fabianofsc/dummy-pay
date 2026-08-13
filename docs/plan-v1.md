@@ -116,8 +116,8 @@ Tracked separately from the phases, because these are what the project is
 judged on. Each is ticked when a test proves it end to end *(→ Step 11.2)*.
 
 - [x] Service starts and the suite passes with no external network
-- [x] `card_approved` → `APPROVED`
-- [x] `card_declined` → `REJECTED`
+- [x] `card_approved` → `PROCESSING` then `APPROVED`
+- [x] `card_declined` → `PROCESSING` then `REJECTED`
 - [x] `card_processing_approved` → `PROCESSING` then `APPROVED`
 - [x] `card_processing_declined` → `PROCESSING` then `REJECTED`
 - [x] Idempotent replay returns the original transaction
@@ -205,10 +205,10 @@ constructed through a validating function so an invalid value cannot exist.
 
 ### Step 2.2 — Payment state machine
 
-**Test first:** each token maps to its creation status per spec §2; each
-`card_processing_*` token settles to the right terminal status; a transition out
-of a terminal status is refused; settling a payment that is no longer
-`PROCESSING` is a no-op rather than an error.
+**Test first:** every token maps to `PROCESSING` at creation and settles to its
+right terminal status; a transition out of a terminal status is refused;
+settling a payment that is no longer `PROCESSING` is a no-op rather than an
+error.
 
 **Then:** the `Payment` type with its transitions.
 
@@ -315,10 +315,10 @@ one winner.
 
 ### Step 5.1 — Happy paths with fakes
 
-**Test first:** `card_approved` produces an `APPROVED` payment and one
-`payment.approved` event; `card_declined` likewise; both `card_processing_*`
-tokens produce a `PROCESSING` payment, one `payment.processing` event, and a
-settlement work item due at `now + delay` measured on the test clock.
+**Test first:** every token produces a `PROCESSING` payment, one
+`payment.processing` event, and a settlement work item due at `now + delay`
+measured on the test clock; settlement then produces the token's terminal
+event.
 
 **Then:** the use case, orchestrating the ports from spec §8 against fakes.
 

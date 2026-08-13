@@ -44,7 +44,7 @@ collection:
       sortKey: 1
     children:
       - url: "{{ _.base_url }}/v1/payments"
-        name: "1. card_approved → APPROVED"
+        name: "1. card_approved → PROCESSING"
         meta:
           id: req_pay_approved
           created: 1700000000000
@@ -71,7 +71,7 @@ collection:
             const body = insomnia.response.json();
             insomnia.test('pay_ prefix', () => insomnia.expect(body.payment_id).to.match(/^pay_/));
             insomnia.test('txn_ prefix', () => insomnia.expect(body.provider_transaction_id).to.match(/^txn_/));
-            insomnia.test('status APPROVED', () => insomnia.expect(body.status).to.eql('APPROVED'));
+            insomnia.test('status PROCESSING', () => insomnia.expect(body.status).to.eql('PROCESSING'));
             insomnia.test('amount correct', () => insomnia.expect(body.amount).to.eql(10990));
             insomnia.test('has created_at', () => insomnia.expect(body.created_at).to.be.a('string'));
             insomnia.environment.set('payment_id', body.payment_id);
@@ -84,7 +84,7 @@ collection:
             store: true
           rebuildPath: true
       - url: "{{ _.base_url }}/v1/payments"
-        name: "2. card_declined → REJECTED"
+        name: "2. card_declined → PROCESSING"
         meta:
           id: req_pay_declined
           created: 1700000000000
@@ -109,7 +109,7 @@ collection:
           afterResponse: |-
             insomnia.test('status 201', () => insomnia.response.to.have.status(201));
             const body = insomnia.response.json();
-            insomnia.test('status REJECTED', () => insomnia.expect(body.status).to.eql('REJECTED'));
+            insomnia.test('status PROCESSING', () => insomnia.expect(body.status).to.eql('PROCESSING'));
         settings:
           renderRequestBody: true
           encodeUrl: true
@@ -216,7 +216,7 @@ collection:
             const body = insomnia.response.json();
             const savedId = insomnia.environment.get('payment_id');
             insomnia.test('same payment_id as #1', () => insomnia.expect(body.payment_id).to.eql(savedId));
-            insomnia.test('status APPROVED', () => insomnia.expect(body.status).to.eql('APPROVED'));
+            insomnia.test('status PROCESSING', () => insomnia.expect(body.status).to.eql('PROCESSING'));
         settings:
           renderRequestBody: true
           encodeUrl: true

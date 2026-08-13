@@ -93,6 +93,6 @@ func TestCreatePayment_FullyWired_ReturnsEncodedResponseBody(t *testing.T) {
 	require.Equal(t, "checkout:wiring-test", resp.ReferenceID)
 	require.Equal(t, int64(5000), resp.Amount)
 	require.Equal(t, "BRL", resp.Currency)
-	require.Equal(t, "APPROVED", resp.Status)
+	require.Equal(t, "PROCESSING", resp.Status)
 	require.NotEmpty(t, resp.CreatedAt)
 }

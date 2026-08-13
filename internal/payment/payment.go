@@ -21,9 +21,8 @@ func (s Status) IsTerminal() bool {
 	return s == StatusApproved || s == StatusRejected
 }
 
-// Payment is a single sale. Its Status is driven entirely by Token: the
-// status it is created with and, for the two processing tokens, the status
-// it settles to (spec §2).
+// Payment is a single sale. Every payment starts PROCESSING; its Token
+// determines the terminal status the settlement worker applies (spec §2).
 type Payment struct {
 	ID                    uuid.UUID
 	AccountID             uuid.UUID
@@ -37,7 +36,7 @@ type Payment struct {
 	UpdatedAt             time.Time
 }
 
-// NewPayment constructs a Payment with the creation status token dictates.
+// NewPayment constructs a Payment in PROCESSING before asynchronous settlement.
 func NewPayment(id, accountID, providerTransactionID uuid.UUID, referenceID string, amount Amount, currency Currency, token ScenarioToken, now time.Time) Payment {
 	return Payment{
 		ID:                    id,
@@ -55,11 +54,7 @@ func NewPayment(id, accountID, providerTransactionID uuid.UUID, referenceID stri
 
 func creationStatus(token ScenarioToken) Status {
 	switch token {
-	case TokenCardApproved:
-		return StatusApproved
-	case TokenCardDeclined:
-		return StatusRejected
-	case TokenCardProcessingApproved, TokenCardProcessingDeclined:
+	case TokenCardApproved, TokenCardDeclined, TokenCardProcessingApproved, TokenCardProcessingDeclined:
 		return StatusProcessing
 	default:
 		panic("payment: unknown scenario token " + string(token))
@@ -67,21 +62,20 @@ func creationStatus(token ScenarioToken) Status {
 }
 
 // Settle transitions a PROCESSING payment to the terminal status its token
-// dictates. Settling a payment that is no longer PROCESSING — because it
-// never was, or because it was already settled — is a no-op rather than an
-// error, so the worker can safely process the same work item twice.
+// dictates. Settling a payment that is already terminal is a no-op, so the
+// worker can safely process the same work item twice.
 func (p *Payment) Settle(now time.Time) {
 	if p.Status != StatusProcessing {
 		return
 	}
 
 	switch p.Token {
-	case TokenCardProcessingApproved:
+	case TokenCardApproved, TokenCardProcessingApproved:
 		p.Status = StatusApproved
-	case TokenCardProcessingDeclined:
+	case TokenCardDeclined, TokenCardProcessingDeclined:
 		p.Status = StatusRejected
 	default:
-		panic("payment: settle called on payment with non-processing token " + string(p.Token))
+		panic("payment: settle called on payment with unknown token " + string(p.Token))
 	}
 	p.UpdatedAt = now
 }
