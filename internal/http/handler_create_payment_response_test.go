@@ -20,7 +20,7 @@ func TestCreatePaymentResponse_HasCorrectShape(t *testing.T) {
 		ReferenceID:           "checkout:123",
 		Amount:                10990,
 		Currency:              "BRL",
-		Status:                "APPROVED",
+		Status:                "PROCESSING",
 		CreatedAt:             "2026-08-10T12:00:00Z",
 	}
 
@@ -52,6 +52,6 @@ func TestCreatePaymentResponse_HasCorrectShape(t *testing.T) {
 	require.Equal(t, "checkout:123", decoded["reference_id"].(string))
 	require.Equal(t, 10990.0, decoded["amount"].(float64))
 	require.Equal(t, "BRL", decoded["currency"].(string))
-	require.Equal(t, "APPROVED", decoded["status"].(string))
+	require.Equal(t, "PROCESSING", decoded["status"].(string))
 	require.Equal(t, "2026-08-10T12:00:00Z", decoded["created_at"].(string))
 }

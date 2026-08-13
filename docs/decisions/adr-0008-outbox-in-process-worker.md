@@ -1,6 +1,6 @@
 # ADR-0008. Run asynchronous work from an outbox table with an in-process worker
 
-- **Status:** Accepted
+- **Status:** Superseded by ADR-0015
 - **Date:** 2026-08-10
 - **Supersedes:** —
 - **Superseded by:** —

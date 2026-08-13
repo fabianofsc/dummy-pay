@@ -225,27 +225,39 @@ func encodeDeliveryID(id uuid.UUID) string {
 
 // --- Acceptance criteria ---
 
-func TestAcceptance_CardApproved_ReturnsApproved(t *testing.T) {
+func TestAcceptance_CardApproved_StartsProcessingThenSettlesApproved(t *testing.T) {
 	deps := newAcceptanceDeps(t, time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC))
+	ctx := context.Background()
 
 	rec := postPayment(t, deps.Router, "accept-card-approved",
 		paymentBody("checkout:approved", 10990, "card_approved"))
 
-	resp := assertPaymentResponse(t, rec, http.StatusCreated, "APPROVED")
+	resp := assertPaymentResponse(t, rec, http.StatusCreated, "PROCESSING")
 	require.Equal(t, int64(10990), resp.Amount)
 	require.Equal(t, "BRL", resp.Currency)
-	require.Equal(t, "APPROVED", resp.Status)
+	require.Equal(t, "PROCESSING", queryPaymentStatus(t, deps.Pool, resp.PaymentID))
+
+	deps.Clock.Advance(processingDelay)
+	require.NoError(t, deps.Worker.ProcessBatch(ctx, 50))
+
+	require.Equal(t, "APPROVED", queryPaymentStatus(t, deps.Pool, resp.PaymentID))
 }
 
-func TestAcceptance_CardDeclined_ReturnsRejected(t *testing.T) {
+func TestAcceptance_CardDeclined_StartsProcessingThenSettlesRejected(t *testing.T) {
 	deps := newAcceptanceDeps(t, time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC))
+	ctx := context.Background()
 
 	rec := postPayment(t, deps.Router, "accept-card-declined",
 		paymentBody("checkout:declined", 5000, "card_declined"))
 
-	resp := assertPaymentResponse(t, rec, http.StatusCreated, "REJECTED")
+	resp := assertPaymentResponse(t, rec, http.StatusCreated, "PROCESSING")
 	require.Equal(t, int64(5000), resp.Amount)
-	require.Equal(t, "REJECTED", resp.Status)
+	require.Equal(t, "PROCESSING", queryPaymentStatus(t, deps.Pool, resp.PaymentID))
+
+	deps.Clock.Advance(processingDelay)
+	require.NoError(t, deps.Worker.ProcessBatch(ctx, 50))
+
+	require.Equal(t, "REJECTED", queryPaymentStatus(t, deps.Pool, resp.PaymentID))
 }
 
 func TestAcceptance_CardProcessingApproved_SettlesToApproved(t *testing.T) {
@@ -287,10 +299,10 @@ func TestAcceptance_IdempotentReplay_ReturnsOriginalTransaction(t *testing.T) {
 	key := "accept-idem-replay"
 
 	first := postPayment(t, deps.Router, key, body)
-	firstResp := assertPaymentResponse(t, first, http.StatusCreated, "APPROVED")
+	firstResp := assertPaymentResponse(t, first, http.StatusCreated, "PROCESSING")
 
 	second := postPayment(t, deps.Router, key, body)
-	secondResp := assertPaymentResponse(t, second, http.StatusCreated, "APPROVED")
+	secondResp := assertPaymentResponse(t, second, http.StatusCreated, "PROCESSING")
 
 	require.Equal(t, firstResp.PaymentID, secondResp.PaymentID)
 	require.Equal(t, firstResp.ProviderTransactionID, secondResp.ProviderTransactionID)
@@ -304,7 +316,7 @@ func TestAcceptance_SameKeyDifferentBody_CreatesNothing(t *testing.T) {
 
 	first := postPayment(t, deps.Router, key,
 		paymentBody("checkout:original", 10990, "card_approved"))
-	assertPaymentResponse(t, first, http.StatusCreated, "APPROVED")
+	assertPaymentResponse(t, first, http.StatusCreated, "PROCESSING")
 
 	second := postPayment(t, deps.Router, key,
 		paymentBody("checkout:different", 5000, "card_declined"))
@@ -377,7 +389,7 @@ func TestAcceptance_HMACSignature_VerifiesOverRawBody(t *testing.T) {
 	var receivedSecret string
 	var receivedBody []byte
 	var receivedSig string
-	ready := make(chan struct{})
+	ready := make(chan struct{}, 1)
 
 	consumer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedBody = nil
@@ -390,8 +402,7 @@ func TestAcceptance_HMACSignature_VerifiesOverRawBody(t *testing.T) {
 	}))
 	defer consumer.Close()
 
-	subRec := postSubscription(t, deps.Router, consumer.URL,
-		[]string{"payment.approved", "payment.rejected", "payment.processing"})
+	subRec := postSubscription(t, deps.Router, consumer.URL, []string{"payment.approved"})
 	require.Equal(t, http.StatusCreated, subRec.Code)
 	var subResp httpapi.CreateSubscriptionResponse
 	require.NoError(t, json.Unmarshal(subRec.Body.Bytes(), &subResp))
@@ -402,8 +413,10 @@ func TestAcceptance_HMACSignature_VerifiesOverRawBody(t *testing.T) {
 
 	rec := postPayment(t, deps.Router, "accept-hmac",
 		paymentBody("checkout:hmac", 10990, "card_approved"))
-	assertPaymentResponse(t, rec, http.StatusCreated, "APPROVED")
+	assertPaymentResponse(t, rec, http.StatusCreated, "PROCESSING")
 
+	deps.Clock.Advance(processingDelay)
+	require.NoError(t, deps.Worker.ProcessBatch(ctx, 50))
 	require.NoError(t, deps.Worker.ProcessBatch(ctx, 50))
 	<-ready
 
@@ -427,14 +440,15 @@ func TestAcceptance_WebhookFailure_RecordsFailedWithMetadata(t *testing.T) {
 	}))
 	defer consumer.Close()
 
-	subRec := postSubscription(t, deps.Router, consumer.URL,
-		[]string{"payment.approved", "payment.rejected", "payment.processing"})
+	subRec := postSubscription(t, deps.Router, consumer.URL, []string{"payment.approved"})
 	require.Equal(t, http.StatusCreated, subRec.Code)
 
 	rec := postPayment(t, deps.Router, "accept-webhook-fail",
 		paymentBody("checkout:fail", 10990, "card_approved"))
-	resp := assertPaymentResponse(t, rec, http.StatusCreated, "APPROVED")
+	resp := assertPaymentResponse(t, rec, http.StatusCreated, "PROCESSING")
 
+	deps.Clock.Advance(processingDelay)
+	require.NoError(t, deps.Worker.ProcessBatch(ctx, 50))
 	require.NoError(t, deps.Worker.ProcessBatch(ctx, 50))
 
 	_, status, attemptCount, lastHTTPStatus := queryDeliveryForPayment(t, deps.Pool, resp.PaymentID)
@@ -467,14 +481,15 @@ func TestAcceptance_Retry_ResendsAndSucceeds(t *testing.T) {
 	}))
 	defer consumer.Close()
 
-	subRec := postSubscription(t, deps.Router, consumer.URL,
-		[]string{"payment.approved", "payment.rejected", "payment.processing"})
+	subRec := postSubscription(t, deps.Router, consumer.URL, []string{"payment.approved"})
 	require.Equal(t, http.StatusCreated, subRec.Code)
 
 	rec := postPayment(t, deps.Router, "accept-retry",
 		paymentBody("checkout:retry", 10990, "card_approved"))
-	resp := assertPaymentResponse(t, rec, http.StatusCreated, "APPROVED")
+	resp := assertPaymentResponse(t, rec, http.StatusCreated, "PROCESSING")
 
+	deps.Clock.Advance(processingDelay)
+	require.NoError(t, deps.Worker.ProcessBatch(ctx, 50))
 	require.NoError(t, deps.Worker.ProcessBatch(ctx, 50))
 
 	deliveryID, status, attemptCount, lastHTTPStatus := queryDeliveryForPayment(t, deps.Pool, resp.PaymentID)

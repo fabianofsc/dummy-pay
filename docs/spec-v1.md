@@ -62,8 +62,8 @@ The token determines the outcome completely. This is the whole simulation
 
 | Token | Status at creation | Settles to |
 | --- | --- | --- |
-| `card_approved` | `APPROVED` | — |
-| `card_declined` | `REJECTED` | — |
+| `card_approved` | `PROCESSING` | `APPROVED` |
+| `card_declined` | `PROCESSING` | `REJECTED` |
 | `card_processing_approved` | `PROCESSING` | `APPROVED` |
 | `card_processing_declined` | `PROCESSING` | `REJECTED` |
 
@@ -72,15 +72,13 @@ Any other value is a validation error. There is no default and no fallback.
 ### Payment state machine
 
 ```
-                  card_approved
-   (new) ─────────────────────────────────▶ APPROVED   (terminal)
-     │            card_declined
-     ├─────────────────────────────────────▶ REJECTED   (terminal)
+                         card_approved
+   (new) ───────────────────────────────▶ PROCESSING ────────▶ APPROVED
+     │           card_processing_approved                 settle
      │
-     │  card_processing_approved            settle
-     ├────────────────────────▶ PROCESSING ────────────▶ APPROVED
-     │  card_processing_declined            settle
-     └────────────────────────▶ PROCESSING ────────────▶ REJECTED
+     │           card_declined
+     └───────────────────────────────▶ PROCESSING ────────▶ REJECTED
+                 card_processing_declined                 settle
 ```
 
 `PROCESSING` is the only non-terminal status. The only transition out of it is
@@ -91,15 +89,13 @@ programming error and panics in tests, returns an error in production.
 
 | Trigger | Event type |
 | --- | --- |
-| Payment created as `APPROVED` | `payment.approved` |
-| Payment created as `REJECTED` | `payment.rejected` |
 | Payment created as `PROCESSING` | `payment.processing` |
 | Settlement to `APPROVED` | `payment.approved` |
 | Settlement to `REJECTED` | `payment.rejected` |
 
-A payment created with a `card_processing_*` token therefore produces two
-events. Events are produced only when an active subscription exists **and** it
-lists that event type; otherwise no delivery is recorded and nothing is sent.
+Every payment therefore produces a processing event and a terminal event.
+Events are produced only when an active subscription exists **and** it lists
+that event type; otherwise no delivery is recorded and nothing is sent.
 
 ---
 
@@ -259,9 +255,8 @@ RETURNING account_id
 ```
 
 **If a row was returned — this request owns the operation.** Within a single
-transaction: insert the payment with the status the token dictates; if the
-status is `PROCESSING`, insert a `SETTLE_PAYMENT` work row due at
-`now + DUMMYPAY_PROCESSING_DELAY`; create the delivery row and a
+transaction: insert the payment as `PROCESSING`; insert a `SETTLE_PAYMENT` work
+row due at `now + DUMMYPAY_PROCESSING_DELAY`; create the delivery row and a
 `DELIVER_WEBHOOK` work row due immediately, if an active subscription covers the
 event type; and update the idempotency row to `COMPLETED` with the payment id,
 response status and response body. Commit.
@@ -485,10 +480,10 @@ external network — and verify that the signature computed over the received ra
 body matches, that a non-2xx marks the delivery `FAILED`, and that a retry
 re-sends byte-identical bytes with an incremented attempt count.
 
-The acceptance list from the README maps to tests as follows: approved,
-declined, both `PROCESSING` scenarios, idempotent replay, key reuse with a
-different body, concurrent duplicate requests, expired lease reclamation, HMAC
-correctness, delivery failure, and successful retry.
+The acceptance list from the README maps to tests as follows: all four tokens
+starting in `PROCESSING` and settling to their outcome, idempotent replay, key
+reuse with a different body, concurrent duplicate requests, expired lease
+reclamation, HMAC correctness, delivery failure, and successful retry.
 
 ---
 

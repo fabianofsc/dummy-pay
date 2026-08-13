@@ -120,8 +120,8 @@ func TestCreatePayment_HappyPaths(t *testing.T) {
 		wantEvent      EventType
 		wantSettleWork bool
 	}{
-		{TokenCardApproved, StatusApproved, EventPaymentApproved, false},
-		{TokenCardDeclined, StatusRejected, EventPaymentRejected, false},
+		{TokenCardApproved, StatusProcessing, EventPaymentProcessing, true},
+		{TokenCardDeclined, StatusProcessing, EventPaymentProcessing, true},
 		{TokenCardProcessingApproved, StatusProcessing, EventPaymentProcessing, true},
 		{TokenCardProcessingDeclined, StatusProcessing, EventPaymentProcessing, true},
 	}
@@ -177,17 +177,17 @@ func TestCreatePayment_HappyPaths(t *testing.T) {
 			require.Equal(t, h.deliveries.ids[0], deliverWork[0].SubjectID)
 			require.True(t, h.start.Equal(deliverWork[0].DueAt))
 
-			// Settlement work exists only for the PROCESSING tokens, and is
-			// due at exactly now + the configured delay.
+			// Every payment starts PROCESSING, so settlement work is due at
+			// exactly now + the configured delay.
 			settleWork := h.outbox.entriesOfKind(OutboxSettlePayment)
-			if !tt.wantSettleWork {
-				require.Empty(t, settleWork)
-			} else {
+			if tt.wantSettleWork {
 				require.Len(t, settleWork, 1)
 				require.Equal(t, got.Payment.ID, settleWork[0].SubjectID)
 				wantDueAt := h.start.Add(testProcessingDelay)
 				require.True(t, wantDueAt.Equal(settleWork[0].DueAt),
 					"settlement due at %s, want exactly %s", settleWork[0].DueAt, wantDueAt)
+			} else {
+				require.Empty(t, settleWork)
 			}
 
 			// The response was encoded once and recorded for replay.
@@ -246,7 +246,7 @@ func TestCreatePayment_SubscriptionNotCoveringEvent_CreatesNoDelivery(t *testing
 
 	require.Empty(t, h.deliveries.drafts)
 	require.Empty(t, h.outbox.entriesOfKind(OutboxDeliverWebhook))
-	require.Equal(t, StatusApproved, got.Payment.Status)
+	require.Equal(t, StatusProcessing, got.Payment.Status)
 	require.Len(t, h.payments.inserted, 1)
 }
 
